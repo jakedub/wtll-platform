@@ -1,0 +1,53 @@
+# WTLL Platform — Render Deployment Configuration
+# Deploy both backend (web service) and frontend (static site) from one repo.
+#
+# Setup steps:
+# 1. Create a new Web Service on Render pointing to this repo
+# 2. Render will auto-detect this render.yaml and create both services
+# 3. Set environment variables in Render dashboard (SECRET_KEY, etc.)
+# 4. The PostgreSQL database is created automatically
+
+services:
+  # ─── Django Backend ────────────────────────────────────────────────────────
+  - type: web
+    name: wtll-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn wtll.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: wtll-db
+          property: connectionString
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://wtll-frontend.onrender.com"
+    healthCheckPath: /api/players/
+
+  # ─── React Frontend ────────────────────────────────────────────────────────
+  - type: web
+    name: wtll-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: "https://wtll-backend.onrender.com"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+# ─── PostgreSQL Database ───────────────────────────────────────────────────
+databases:
+  - name: wtll-db
+    databaseName: wtll-platform
+    user: wtll
+    plan: free
