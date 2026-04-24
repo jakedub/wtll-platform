@@ -17,11 +17,10 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["vite/client"],
     "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["src/*"]
     },
-
-    "ignoreDeprecations": "6.0"
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
