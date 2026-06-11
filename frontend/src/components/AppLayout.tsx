@@ -1,73 +1,252 @@
-import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import AppBar from '@mui/material/AppBar'
+import { useState, useEffect } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Drawer from '@mui/material/Drawer'
+import AppBar from '@mui/material/AppBar'
+import Toolbar from '@mui/material/Toolbar'
 import IconButton from '@mui/material/IconButton'
 import List from '@mui/material/List'
 import ListItem from '@mui/material/ListItem'
 import ListItemButton from '@mui/material/ListItemButton'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
-import Toolbar from '@mui/material/Toolbar'
+import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import MenuIcon from '@mui/icons-material/Menu'
-import PeopleIcon from '@mui/icons-material/People'
-import GroupsIcon from '@mui/icons-material/Groups'
-import SportsBaseballIcon from '@mui/icons-material/SportsBaseball'
+import Divider from '@mui/material/Divider'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
+import MenuIcon from '@mui/icons-material/Menu'
+import HomeIcon from '@mui/icons-material/Home'
+import OpenInFullIcon from '@mui/icons-material/OpenInFull'
+import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 
-const DRAWER_WIDTH = 220
+import LogoutIcon from '@mui/icons-material/Logout'
+import { NAV_SECTIONS, isFullSizeEligible } from '../config/navConfig'
+import { useAuth } from '../context/AuthContext'
 
-const NAV = [
-  { label: 'Players', path: '/players', icon: <PeopleIcon /> },
-  { label: 'Teams', path: '/teams', icon: <GroupsIcon /> },
-  { label: 'Log Pitches', path: '/pitch-log', icon: <SportsBaseballIcon /> },
-]
+// ── Constants ─────────────────────────────────────────────────────────────────
+const RAIL_BG    = '#1c1c1e'
+const DRAWER_BG  = '#111'
+const RAIL_TEXT  = 'rgba(255,255,255,0.55)'
+const ITEM_TEXT  = 'rgba(255,255,255,0.82)'
+const ACTIVE_BG  = '#C41230'
+const HOVER_BG   = 'rgba(255,255,255,0.07)'
+const RAIL_W     = 72
+const DRAWER_W   = 236
 
-interface Props {
-  children: React.ReactNode
-}
+interface Props { children: React.ReactNode }
 
 export default function AppLayout({ children }: Props) {
-  const theme = useTheme()
+  const theme    = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const { user, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
-  const drawerContent = (
-    <Box sx={{ pt: 1 }}>
-<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+  // Which section's drawer is open (null = closed)
+  const [activeSection, setActiveSection] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('activeSection') } catch { return null }
+  })
+  // Full-size mode — collapses everything for focus-heavy pages
+  const [fullSize, setFullSize] = useState(false)
+  // Mobile drawer
+  const [mobileOpen, setMobileOpen] = useState(false)
 
-  <img
+  const section = NAV_SECTIONS.find(s => s.id === activeSection) ?? null
+  const eligible = isFullSizeEligible(location.pathname)
 
-    src="/pwa-512.png"
+  // Auto-open the section whose item is currently active
+  useEffect(() => {
+    const match = NAV_SECTIONS.find(s =>
+      s.items.some(i => isItemActive(i.path, location.pathname, location.search))
+    )
+    if (match && match.id !== activeSection) {
+      setActiveSection(match.id)
+      try { sessionStorage.setItem('activeSection', match.id) } catch {}
+    }
+  }, [location.pathname, location.search]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    alt="WTLL Logo"
+  // Exit full-size when navigating away from eligible pages
+  useEffect(() => {
+    if (!eligible) setFullSize(false)
+  }, [eligible])
 
-    style={{ width: 28, height: 28, borderRadius: 6 }}
+  const toggleSection = (id: string) => {
+    const next = activeSection === id ? null : id
+    setActiveSection(next)
+    try { sessionStorage.setItem('activeSection', next ?? '') } catch {}
+  }
 
-  />
+  const drawerOpen = !!section && !fullSize && !isMobile
 
-  <Typography
+  // ── Path/query-param aware active check ──────────────────────────────────────
+  function isItemActive(itemPath: string, pathname: string, search: string): boolean {
+    const [p, q] = itemPath.split('?')
+    if (q) return (pathname === p || pathname.startsWith(p + '/')) && search.includes(q)
+    const pathMatch = pathname === p || pathname.startsWith(p + '/')
+    if (!pathMatch) return false
+    // Don't highlight bare /players if ?sport=softball is active
+    if (search) {
+      const hasQueryVariant = NAV_SECTIONS.flatMap(s => s.items).some(item => {
+        const [ip, iq] = item.path.split('?')
+        return iq && ip === p && search.includes(iq)
+      })
+      if (hasQueryVariant) return false
+    }
+    return true
+  }
 
-    variant="h6"
+  // ── Rail ──────────────────────────────────────────────────────────────────────
+  const rail = (
+    <Box sx={{
+      width: RAIL_W,
+      height: '100%',
+      bgcolor: RAIL_BG,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      py: 1,
+      borderRight: '1px solid rgba(255,255,255,0.06)',
+      flexShrink: 0,
+      overflowX: 'hidden',
+    }}>
+      {/* Logo */}
+      <Box
+        component={Link}
+        to="/"
+        onClick={() => {
+          setMobileOpen(false)
+          setActiveSection(null)
+          try { sessionStorage.setItem('activeSection', '') } catch {}
+        }}
+        sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 1, textDecoration: 'none', '&:hover': { opacity: 0.8 } }}
+      >
+        <Box component="img" src="/pwa-512.png" alt="WTLL" sx={{ width: 36, height: 36, borderRadius: 1, mb: 0.25 }} />
+      </Box>
 
-    sx={{ color: 'primary.main', fontWeight: 700, lineHeight: 1.2 }}
+      {/* Home — closes section drawer */}
+      <Tooltip title="Home" placement="right">
+        <IconButton
+          component={Link}
+          to="/"
+          onClick={() => {
+            setMobileOpen(false)
+            setActiveSection(null)
+            try { sessionStorage.setItem('activeSection', '') } catch {}
+          }}
+          sx={{
+            color: location.pathname === '/' ? '#fff' : RAIL_TEXT,
+            bgcolor: location.pathname === '/' ? ACTIVE_BG : 'transparent',
+            width: 44, height: 44, borderRadius: 2, mb: 0.5,
+            '&:hover': { bgcolor: location.pathname === '/' ? '#a80f28' : HOVER_BG },
+          }}
+        >
+          <HomeIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
 
-  >
+      <Divider sx={{ width: 32, bgcolor: 'rgba(255,255,255,0.1)', my: 0.5 }} />
 
-    League Platform
+      {/* Section icons */}
+      {NAV_SECTIONS.map(s => {
+        const isActive = activeSection === s.id
+        const hasActivePath = s.items.some(i => isItemActive(i.path, location.pathname, location.search))
+        return (
+          <Tooltip key={s.id} title={s.label} placement="right">
+            <IconButton
+              onClick={() => { toggleSection(s.id); setMobileOpen(false) }}
+              sx={{
+                color: isActive || hasActivePath ? '#fff' : RAIL_TEXT,
+                bgcolor: isActive ? s.color : hasActivePath ? `${s.color}30` : 'transparent',
+                width: 44, height: 44, borderRadius: 2, mb: 0.5,
+                transition: 'background 0.15s',
+                '&:hover': { bgcolor: isActive ? s.color : `${s.color}25` },
+              }}
+            >
+              {s.icon}
+            </IconButton>
+          </Tooltip>
+        )
+      })}
 
-  </Typography>
+      {/* Spacer — pushes logout to bottom of rail */}
+      <Box sx={{ flex: 1 }} />
 
-</Box>
-      <List sx={{ px: 1, pt: 1.5 }}>
-        {NAV.map(({ label, path, icon }) => {
-          const active = location.pathname.startsWith(path)
+      {/* Logout */}
+      <Tooltip title={user ? `Sign out (${user.email})` : 'Sign out'} placement="right">
+        <IconButton
+          onClick={logout}
+          sx={{
+            color: RAIL_TEXT,
+            width: 44, height: 44, borderRadius: 2, mb: 1,
+            '&:hover': { bgcolor: HOVER_BG, color: '#fff' },
+          }}
+        >
+          <LogoutIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  )
+
+  // ── Section drawer ────────────────────────────────────────────────────────────
+  const sectionDrawer = section ? (
+    <Box sx={{
+      width: DRAWER_W,
+      height: '100%',
+      bgcolor: DRAWER_BG,
+      display: 'flex',
+      flexDirection: 'column',
+      flexShrink: 0,
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      borderRight: '1px solid rgba(255,255,255,0.08)',
+    }}>
+      {/* Section header — click to go to section dashboard */}
+      <Box
+        onClick={() => navigate(section.dashboardPath)}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1.5,
+          px: 2, py: 2,
+          cursor: 'pointer',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+        }}
+      >
+        <Box sx={{ color: section.color, display: 'flex', flexShrink: 0 }}>{section.icon}</Box>
+        <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem', flex: 1 }}>{section.label}</Typography>
+        <Tooltip title="Close panel">
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); toggleSection(section.id) }}
+            sx={{ color: 'rgba(255,255,255,0.35)', '&:hover': { color: '#fff' } }}
+          >
+            <ChevronLeftIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      {/* Section overview link */}
+      <Box
+        onClick={() => navigate(section.dashboardPath)}
+        sx={{
+          px: 2, py: 1.25, cursor: 'pointer',
+          '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+        }}
+      >
+        <Typography sx={{ fontSize: '0.75rem', color: `${section.color}cc`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          {section.label} Overview →
+        </Typography>
+      </Box>
+
+      <Divider sx={{ bgcolor: 'rgba(255,255,255,0.07)', mx: 1.5 }} />
+
+      {/* Sub-items */}
+      <List disablePadding sx={{ px: 1, pt: 0.5, pb: 2 }}>
+        {section.items.map(({ label, path, icon }) => {
+          const active = isItemActive(path, location.pathname, location.search)
           return (
-            <ListItem key={path} disablePadding sx={{ mb: 0.5 }}>
+            <ListItem key={path} disablePadding sx={{ mb: 0.25 }}>
               <ListItemButton
                 component={Link}
                 to={path}
@@ -75,18 +254,22 @@ export default function AppLayout({ children }: Props) {
                 selected={active}
                 sx={{
                   borderRadius: 1.5,
+                  py: 0.75,
+                  color: active ? '#fff' : ITEM_TEXT,
                   '&.Mui-selected': {
-                    backgroundColor: 'primary.main',
-                    color: 'white',
-                    '& .MuiListItemIcon-root': { color: 'white' },
-                    '&:hover': { backgroundColor: 'primary.dark' },
+                    bgcolor: section.color,
+                    '& .MuiListItemIcon-root': { color: '#fff' },
+                    '&:hover': { bgcolor: `${section.color}dd` },
                   },
+                  '&:hover': { bgcolor: active ? `${section.color}dd` : HOVER_BG },
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 36 }}>{icon}</ListItemIcon>
+                <ListItemIcon sx={{ minWidth: 32, color: active ? '#fff' : 'rgba(255,255,255,0.4)' }}>
+                  {icon}
+                </ListItemIcon>
                 <ListItemText
                   primary={label}
-                  primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: active ? 600 : 400 }}
+                  primaryTypographyProps={{ fontSize: '0.84rem', fontWeight: active ? 600 : 400 }}
                 />
               </ListItemButton>
             </ListItem>
@@ -94,65 +277,111 @@ export default function AppLayout({ children }: Props) {
         })}
       </List>
     </Box>
+  ) : null
+
+  // ── Full-size toggle (floating) ────────────────────────────────────────────────
+  const fullSizeToggle = eligible && (
+    <Tooltip title={fullSize ? 'Exit full size' : 'Full size mode'} placement="right">
+      <IconButton
+        onClick={() => setFullSize(v => !v)}
+        size="small"
+        sx={{
+          position: 'fixed',
+          bottom: 16, left: fullSize ? 12 : RAIL_W + (drawerOpen ? DRAWER_W : 0) + 12,
+          zIndex: 1300,
+          bgcolor: 'rgba(28,28,30,0.9)',
+          color: '#fff',
+          border: '1px solid rgba(255,255,255,0.15)',
+          backdropFilter: 'blur(8px)',
+          width: 32, height: 32,
+          transition: 'left 0.2s ease',
+          '&:hover': { bgcolor: '#333' },
+        }}
+      >
+        {fullSize ? <CloseFullscreenIcon sx={{ fontSize: 16 }} /> : <OpenInFullIcon sx={{ fontSize: 16 }} />}
+      </IconButton>
+    </Tooltip>
   )
 
-  return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-      {/* Mobile AppBar */}
-      {isMobile && (
-        <AppBar position="fixed" color="primary">
+  // ── Mobile layout ─────────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <AppBar position="fixed" sx={{ bgcolor: RAIL_BG, borderBottom: '1px solid rgba(255,255,255,0.08)' }} elevation={0}>
           <Toolbar>
-            <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 2 }}>
+            <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1 }}>
               <MenuIcon />
             </IconButton>
-            <Typography variant="h6" fontWeight={700}>WTLL</Typography>
+            <Box component="img" src="/pwa-512.png" alt="WTLL" sx={{ width: 28, height: 28, borderRadius: 0.5, mr: 1 }} />
+            <Typography variant="h6" fontWeight={700} sx={{ color: '#fff' }}>WTLL</Typography>
           </Toolbar>
         </AppBar>
-      )}
+        <Drawer variant="temporary" open={mobileOpen} onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{ '& .MuiDrawer-paper': { width: RAIL_W + DRAWER_W, bgcolor: RAIL_BG, border: 'none', display: 'flex', flexDirection: 'row' } }}>
+          {rail}
+          {sectionDrawer}
+        </Drawer>
+        <Box component="main" sx={{ flex: 1, mt: 7, p: 2 }}>
+          {children}
+        </Box>
+      </Box>
+    )
+  }
 
-      {/* Sidebar */}
-      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
-        {isMobile ? (
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={() => setMobileOpen(false)}
-            ModalProps={{ keepMounted: true }}
-            sx={{ '& .MuiDrawer-paper': { width: DRAWER_WIDTH } }}
-          >
-            {drawerContent}
-          </Drawer>
-        ) : (
-          <Drawer
-            variant="permanent"
-            sx={{
-              '& .MuiDrawer-paper': {
-                width: DRAWER_WIDTH,
-                boxSizing: 'border-box',
-                borderRight: '1px solid',
-                borderColor: 'divider',
-              },
-            }}
-            open
-          >
-            {drawerContent}
-          </Drawer>
-        )}
+  // ── Desktop layout ─────────────────────────────────────────────────────────────
+  const totalNavW = fullSize ? 0 : RAIL_W + (drawerOpen ? DRAWER_W : 0)
+
+  return (
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Rail + drawer panel */}
+      <Box sx={{
+        display: 'flex',
+        flexDirection: 'row',
+        height: '100%',
+        width: totalNavW,
+        flexShrink: 0,
+        overflow: 'hidden',
+        transition: 'width 0.2s ease',
+      }}>
+        {/* Rail — always rendered, transitions to 0 in full-size */}
+        <Box sx={{
+          width: fullSize ? 0 : RAIL_W,
+          transition: 'width 0.2s ease',
+          overflow: 'hidden',
+          flexShrink: 0,
+          height: '100%',
+        }}>
+          {rail}
+        </Box>
+
+        {/* Section drawer — slides in next to rail */}
+        <Box sx={{
+          width: drawerOpen ? DRAWER_W : 0,
+          transition: 'width 0.2s ease',
+          overflow: 'hidden',
+          flexShrink: 0,
+          height: '100%',
+        }}>
+          {sectionDrawer}
+        </Box>
       </Box>
 
       {/* Main content */}
       <Box
         component="main"
         sx={{
-          flexGrow: 1,
-          width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
-          mt: { xs: 7, md: 0 },
-          p: { xs: 2, md: 3 },
-          maxWidth: 1200,
+          flex: 1,
+          overflowY: 'auto',
+          height: '100vh',
+          p: 3,
         }}
       >
         {children}
       </Box>
+
+      {/* Full-size toggle */}
+      {fullSizeToggle}
     </Box>
   )
 }

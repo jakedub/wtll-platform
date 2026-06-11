@@ -4,4 +4,4 @@ from league.models.divisions import Division
 class DivisionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Division
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'is_calendar_only']

@@ -44,13 +44,31 @@ class PlayerListView(generics.ListAPIView):
         if is_eligible is not None:
             qs = qs.filter(is_eligible=is_eligible.lower() == "true")
 
+        sport = self.request.query_params.get("sport")
+        if sport:
+            if sport.lower() == "baseball":
+                # Treat blank/null sport as baseball (legacy imports)
+                qs = qs.filter(sport__in=["baseball", "", None])
+            else:
+                qs = qs.filter(sport__iexact=sport)
+
+        # By default hide archived players; pass ?archived=true to see them
+        archived = self.request.query_params.get("archived", "false")
+        qs = qs.filter(is_archived=(archived.lower() == "true"))
+
+        # By default show only active players; pass ?active=false to see inactive
+        active_param = self.request.query_params.get("active", "true")
+        if active_param.lower() != "all":
+            qs = qs.filter(is_active=(active_param.lower() != "false"))
+
         return qs.distinct()
 
 
-class PlayerDetailView(generics.RetrieveAPIView):
-    """GET /api/players/<player_id>/"""
+class PlayerDetailView(generics.RetrieveUpdateAPIView):
+    """GET/PATCH /api/players/<player_id>/"""
     serializer_class = PlayerSerializer
     lookup_url_kwarg = "player_id"
+    http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
         return Player.objects.prefetch_related(
@@ -58,6 +76,10 @@ class PlayerDetailView(generics.RetrieveAPIView):
             "enrollments__team",
             "enrollments__program",
         )
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
 
 
 class PlayerEnrollmentsView(generics.ListAPIView):
@@ -126,3 +148,43 @@ class PlayerPitchHistoryView(generics.ListAPIView):
             )
             .order_by("-game_date")
         )
+
+# ── Archive / Restore / Delete ────────────────────────────────────────────────
+
+from django.utils import timezone as tz
+from rest_framework.views import APIView as _APIView
+from rest_framework.response import Response as _Response
+from rest_framework import status as _status
+
+
+class PlayerArchiveView(_APIView):
+    """POST /api/players/<id>/archive/  — soft-delete a player."""
+    def post(self, request, player_id):
+        player = get_object_or_404(Player, pk=player_id)
+        player.is_archived = True
+        player.archived_at = tz.now()
+        player.save(update_fields=["is_archived", "archived_at"])
+        return _Response({"archived": True, "id": player.id})
+
+
+class PlayerRestoreView(_APIView):
+    """POST /api/players/<id>/restore/  — restore a player from the recycling bin."""
+    def post(self, request, player_id):
+        player = get_object_or_404(Player, pk=player_id)
+        player.is_archived = False
+        player.archived_at = None
+        player.save(update_fields=["is_archived", "archived_at"])
+        return _Response({"restored": True, "id": player.id})
+
+
+class PlayerPermanentDeleteView(_APIView):
+    """DELETE /api/players/<id>/  — permanently delete (only if already archived)."""
+    def delete(self, request, player_id):
+        player = get_object_or_404(Player, pk=player_id)
+        if not player.is_archived:
+            return _Response(
+                {"error": "Player must be archived before permanent deletion."},
+                status=_status.HTTP_400_BAD_REQUEST,
+            )
+        player.delete()
+        return _Response(status=_status.HTTP_204_NO_CONTENT)

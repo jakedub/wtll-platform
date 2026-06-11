@@ -18,6 +18,10 @@ ALLOWED_HOSTS = config(
     default="localhost,127.0.0.1",
 ).split(",")
 
+# Trust Railway's internal proxy headers so request.build_absolute_uri() and
+# CSRF work correctly behind Railway's edge network.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # ─── Apps ─────────────────────────────────────────────────────────────────────
 
 INSTALLED_APPS = [
@@ -29,6 +33,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # Third-party
     "rest_framework",
+    "rest_framework.authtoken",
     "corsheaders",
     # Local
     "league",
@@ -75,7 +80,15 @@ DATABASE_URL = config("DATABASE_URL", default=None)
 
 if DATABASE_URL:
     DATABASES = {
-        "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)
+        # conn_health_checks=True validates the connection before each request,
+        # which is required for Neon PostgreSQL — the free tier suspends compute
+        # after 5 minutes of inactivity, which would otherwise cause stale-connection
+        # errors on the first query after a quiet period.
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=60,
+            conn_health_checks=True,
+        )
     }
 else:
     DATABASES = {
@@ -111,6 +124,9 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 STORAGES = {
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -137,11 +153,41 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PARSER_CLASSES": [
         "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.MultiPartParser",
+        "rest_framework.parsers.FormParser",
     ],
-    # Auth will be added in a later phase
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    # Open by default — individual views opt in to IsAuthenticated where needed.
+    # The frontend login gate handles access control for the board app.
     "DEFAULT_PERMISSION_CLASSES": [],
 }
+# ─── Google Maps ──────────────────────────────────────────────────────────────
+
+GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")
+
+# ─── Email ────────────────────────────────────────────────────────────────────
+# Local dev: print emails to the terminal (no SMTP setup needed).
+# Production: set EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# and configure EMAIL_HOST / EMAIL_PORT / EMAIL_HOST_USER / EMAIL_HOST_PASSWORD.
+# Recommended provider: Resend (resend.com) — free tier, simple SMTP.
+
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.resend.com")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="resend")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="WTLL Platform <noreply@wtll.org>")
+
+# Frontend URL used to construct magic link URLs in emails
+FRONTEND_URL = config("FRONTEND_URL", default="")
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "WTLL Platform API",
     "DESCRIPTION": "Washington Township Little League — League Operations Platform",

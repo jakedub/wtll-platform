@@ -30,7 +30,12 @@ class TeamViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["division__name", "name"]
 
     def get_queryset(self):
-        qs = Team.objects.select_related("division").all()
+        qs = (
+            Team.objects
+            .select_related("division")
+            .prefetch_related("calendars__events")
+            .all()
+        )
 
         division_id = self.request.query_params.get("division")
         if division_id:
@@ -52,18 +57,26 @@ class TeamViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(instance)
         return Response({"success": True, "data": serializer.data})
 
+
     @action(detail=False, url_path=r"by-division/(?P<division_id>\d+)")
     def by_division(self, request, division_id=None):
         """
         GET /api/teams/by-division/<division_id>/
         Returns active teams for a specific division.
         """
-        qs = Team.objects.select_related("division").filter(
-            division_id=division_id, is_active=True
+        qs = (
+            Team.objects
+            .select_related("division")
+            .prefetch_related("calendars__events")
+            .filter(
+                division_id=division_id,
+                is_active=True
+            )
         )
         serializer = self.get_serializer(qs, many=True)
         return Response({"success": True, "data": serializer.data})
-    
+
+
 class TeamRostersView(APIView):
     def get(self, request, team_id):
         team = get_object_or_404(Team, pk=team_id)
@@ -90,7 +103,8 @@ class TeamRostersView(APIView):
                 "status": status.get("status"),
             })
         return Response({"success": True, "data": data})
-    
+
+
 class TeamRosterWithPitchSummaryView(APIView):
     """
     GET /api/teams/<team_id>/roster-with-pitch-summary
@@ -120,6 +134,7 @@ class TeamRosterWithPitchSummaryView(APIView):
                 "player_name": f"{player.first_name} {player.last_name}",
                 "division": enrollment.division.name if enrollment.division else None,
                 "team": enrollment.team.name if enrollment.team else None,
+                "is_pitcher": player.is_pitcher,
                 "pitch_status": status
             })
 

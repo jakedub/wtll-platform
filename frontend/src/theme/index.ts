@@ -3,46 +3,46 @@ import { createTheme } from '@mui/material/styles'
 /**
  * WTLL Platform Theme
  *
- * Clean, utilitarian aesthetic — this is a tool for coaches and admins,
- * not a consumer app. Prioritizes data density and legibility.
+ * Matches the WTLL brand: red primary, dark charcoal sidebar,
+ * white/light-gray content areas. Bold, athletic, clear.
  *
- * Primary: Deep navy (authority, trust)
- * Accent: Amber (warnings, status highlights)
- * Background: Near-white with subtle gray surface
+ * Primary: WTLL Red
+ * Sidebar: Deep charcoal (#1c1c1e)
+ * Background: Off-white with subtle gray surface
  */
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#1a2744',
-      light: '#2e3f6e',
-      dark: '#0f1829',
+      main: '#C41230',
+      light: '#E03050',
+      dark: '#960E24',
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#e8a020',
-      light: '#f0b84a',
-      dark: '#c07010',
-      contrastText: '#1a2744',
+      main: '#3d3d3d',
+      light: '#5a5a5a',
+      dark: '#1c1c1c',
+      contrastText: '#ffffff',
     },
     error: {
-      main: '#d32f2f',
+      main: '#C41230',
     },
     warning: {
-      main: '#e8a020',
+      main: '#d97706',
     },
     success: {
       main: '#2e7d32',
     },
     background: {
-      default: '#f5f6f8',
+      default: '#f4f4f5',
       paper: '#ffffff',
     },
     text: {
-      primary: '#1a1f2e',
-      secondary: '#5a6275',
+      primary: '#111111',
+      secondary: '#6b6b6b',
     },
-    divider: '#e2e5ec',
+    divider: '#e4e4e7',
   },
   typography: {
     fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
@@ -111,6 +111,21 @@ const theme = createTheme({
     MuiButton: {
       defaultProps: { disableElevation: true },
     },
+    MuiCssBaseline: {
+    styleOverrides: {
+      ".rbc-agenda-view table": {
+        width: "100%",
+        borderCollapse: "collapse",
+      },
+      ".rbc-agenda-date-cell": {
+        width: "120px",
+        verticalAlign: "top",
+      },
+      ".rbc-agenda-time-cell": {
+        width: "90px",
+      },
+    },
+  },
   },
 })
 

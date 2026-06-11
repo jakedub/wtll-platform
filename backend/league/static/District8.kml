@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document id="1UzSbvCf8XlRIi12gZyrAyas67xO9Pjzb">
+	<name>District 8</name>
+	<gx:CascadingStyle kml:id="__managed_style_2747EAE4B836A754E4C8">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>6</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_18BC81325E36A754E4C8">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>4</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_0E8437B23536A754E4C8">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_18BC81325E36A754E4C8</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_2747EAE4B836A754E4C8</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Placemark id="0AD9A91C9E36A74BEAED">
+		<name>39°57&apos;18.1&quot;N 86°13&apos;20.9&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.22247999999999,39.95503,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="09A594368136A74CAA2E">
+		<name>39°57&apos;23.6&quot;N 86°07&apos;36.3&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.12674,39.95656,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="05EA84C19F36A74D2260">
+		<name>39°55&apos;37.7&quot;N 86°07&apos;37.0&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.12693,39.92713,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="04623988A936A74DBA51">
+		<name>39°55&apos;37.1&quot;N 86°06&apos;42.7&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.11185999999999,39.92698,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0A9DA6875A36A74F13B2">
+		<name>39°55&apos;34.2&quot;N 86°13&apos;19.3&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.22202999999999,39.92617,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="08FD17BE3036A74F590A">
+		<name>39°55&apos;34.3&quot;N 86°13&apos;46.9&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.22968999999999,39.92619,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="06B0DC850E36A74FB675">
+		<name>39°52&apos;05.1&quot;N 86°12&apos;06.4&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.20177,39.86809,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="004839E43136A7500793">
+		<name>39°52&apos;04.3&quot;N 86°13&apos;01.2&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.217,39.86785,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0CC10F479036A75068B5">
+		<name>39°49&apos;26.7&quot;N 86°12&apos;58.4&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.21623,39.82407,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="02E6FE8D5036A750B6CC">
+		<name>39°49&apos;28.5&quot;N 86°11&apos;14.9&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.18746,39.82459,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0F24D60D7536A75115E6">
+		<name>39°49&apos;54.7&quot;N 86°11&apos;03.5&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.18431,39.83186,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0BF02CA7AF36A7516AEC">
+		<name>39°50&apos;11.9&quot;N 86°10&apos;40.1&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.17780999999999,39.83665,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="02122618FF36A751D989">
+		<name>39°51&apos;14.7&quot;N 86°09&apos;47.9&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.16331,39.85407,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="09D99BA56336A7522F8E">
+		<name>39°52&apos;16.5&quot;N 86°09&apos;22.4&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.15622999999999,39.87125,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0A15C1885D36A752888B">
+		<name>39°52&apos;58.9&quot;N 86°09&apos;28.8&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.15799,39.88301999999999,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0469ADACBE36A752C728">
+		<name>39°52&apos;59.8&quot;N 86°08&apos;44.7&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.14576,39.88327,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="021CF4A7B736A7531BED">
+		<name>39°53&apos;25.4&quot;N 86°08&apos;44.4&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.14567,39.89038,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0683CAEC4336A7535BF0">
+		<name>39°53&apos;25.6&quot;N 86°08&apos;16.0&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.13776999999999,39.89045,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0D57EB78E036A753A3B4">
+		<name>39°53&apos;39.4&quot;N 86°07&apos;54.4&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.13179,39.89427999999999,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="0E517F523336A753DE9D">
+		<name>39°53&apos;29.6&quot;N 86°07&apos;19.8&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.12215999999999,39.89155,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="02C952ADEA36A7550650">
+		<name>39°54&apos;44.2&quot;N 86°06&apos;50.8&quot;W</name>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<coordinates>-86.11412,39.91227,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark id="09C0A061F536A7593DEB">
+		<name>Mapped</name>
+		<LookAt>
+			<longitude>-86.14127793391364</longitude>
+			<latitude>39.95323140351653</latitude>
+			<altitude>259.0831665316993</altitude>
+			<heading>10.54668235637648</heading>
+			<tilt>4.475276378659228</tilt>
+			<gx:fovy>34.99988991928913</gx:fovy>
+			<range>7147.343436899828</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_0E8437B23536A754E4C8</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						-86.22212347693544,39.92649359691546,0 -86.22961277436283,39.92632867112822,0 -86.20191377912518,39.86823853891254,0 -86.21697441936615,39.86821995895856,0 -86.21616677801768,39.82438925284526,0 -86.18733674218257,39.82478335112226,0 -86.18438454242211,39.83192618566578,0 -86.17790298079439,39.8369294733047,0 -86.17960591802,39.84347036957577,0 -86.1803862958517,39.84687206654316,0 -86.17955486601679,39.84978772844039,0 -86.17852152982694,39.85088715889751,0 -86.17657296346022,39.85125777924815,0 -86.17059331357345,39.85174970237593,0 -86.16611521206069,39.8527396337435,0 -86.16324607985116,39.85449606229415,0 -86.16258911592631,39.86021483886002,0 -86.16164386516877,39.86486266422558,0 -86.15972732965936,39.86872596266037,0 -86.15632930009487,39.87148252407544,0 -86.158090711423,39.88322205759958,0 -86.14589696257808,39.88333554255107,0 -86.14582436892701,39.89052711506388,0 -86.1377088981958,39.89072142727461,0 -86.13663378701447,39.89244147700443,0 -86.13552709971461,39.8935032552515,0 -86.13445499137752,39.89424646420636,0 -86.13220934464776,39.89445975823516,0 -86.12662001806014,39.89278614632194,0 -86.12413625014062,39.89219854076256,0 -86.12196956611136,39.89314285978665,0 -86.1206543087842,39.90427552594255,0 -86.11665865050851,39.90871659648793,0 -86.11388856098648,39.91457004936293,0 -86.11104785147822,39.92914526643693,0 -86.12602234845353,39.92946785801343,0 -86.1264169074076,39.95675152565263,0 -86.2225997385986,39.95568534817674,0 -86.22212347693544,39.92649359691546,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

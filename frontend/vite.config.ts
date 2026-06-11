@@ -4,28 +4,60 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      jsxImportSource: '@emotion/react',
+      babel: {
+        plugins: ['@emotion/babel-plugin'],
+      },
+    }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico'],
+      includeAssets: ['favicon.ico', 'pwa-192.png', 'pwa-512.png'],
       manifest: {
-        name: 'WTLL Coach Dashboard',
+        name: 'Washington Township Little League',
         short_name: 'WTLL',
-        description: 'Baseball pitch tracking and team management',
-        theme_color: '#ffffff',
+        description: 'WTLL — volunteer sign-ups, pitch log, and scorekeeper tools',
+        theme_color: '#C41230',
+        background_color: '#ffffff',
+        display: 'standalone',
+        orientation: 'portrait-primary',
+        scope: '/',
+        start_url: '/public/volunteer-signups',
+        categories: ['sports', 'utilities'],
         icons: [
           {
             src: '/pwa-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
           },
           {
             src: '/pwa-512.png',
             sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      }
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+      workbox: {
+        // Cache all static assets
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Network-first for API calls so pitch counts are always fresh
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/api/'),
+            handler: 'NetworkFirst' as const,
+            options: {
+              cacheName: 'wtll-api',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 60, maxAgeSeconds: 300 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+        // SPA fallback — only for public routes so admin isn't impacted offline
+        navigateFallback: '/index.html',
+        navigateFallbackAllowlist: [/^\/public\//],
+      },
     })
   ],
   server: {
@@ -36,6 +68,19 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  resolve: {
+    dedupe: ['@emotion/react', '@emotion/styled', '@mui/material'],
+  },
+  optimizeDeps: {
+    include: [
+      '@mui/material',
+      '@mui/material/styles',
+      '@mui/icons-material',
+      '@emotion/react',
+      '@emotion/styled',
+    ],
+    force: true,
   },
   build: {
     outDir: 'dist',

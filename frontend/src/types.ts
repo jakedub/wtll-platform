@@ -9,6 +9,8 @@ export interface PlayerPitchStatus {
   next_available_date: string
   pitches_last_outing: number
   pitches_last_7_days: number
+  consecutive_days_pitched: number
+  consecutive_day_block: boolean
   warnings: string[]
 }
 
@@ -29,11 +31,12 @@ export type ApiResponse<T> = ApiSuccess<T> | ApiError
 // ─── Form Types ───────────────────────────────────────────────────────────────
 
 export type PitchCountFormData = {
-  player: number
-  player_enrollment: number
+  player?: number
+  player_enrollment?: number
   game_date: string
   pitches_thrown: number
   notes?: string
+  team?: number | null
 }
 export type PlayerEnrollment = {
   id: number
@@ -42,3 +45,4 @@ export type PlayerEnrollment = {
   program_name?: string
   label?: string
 }
+

@@ -9,6 +9,10 @@ class Division(models.Model):
         null=True,
         blank=True
     )
+    is_calendar_only = models.BooleanField(
+        default=False,
+        help_text="If True, this division appears only in calendar/schedule views and is excluded from player lists, evaluations, All Stars, etc.",
+    )
 
 
 

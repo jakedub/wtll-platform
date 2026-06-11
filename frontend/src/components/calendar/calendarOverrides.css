@@ -1,0 +1,20 @@
+.rbc-agenda-view table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.rbc-agenda-view tbody tr {
+  border-bottom: 1px solid #eee;
+}
+
+.rbc-agenda-view td {
+  vertical-align: top;
+}
+
+.rbc-agenda-date-cell {
+  background: #f4f6f8 !important;
+  width: 120px;
+}
+.rbc-calendar {
+  min-width: 700px;
+}

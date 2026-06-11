@@ -13,4 +13,5 @@ export interface Team {
   division_name: string | null
   is_active: boolean
   created_at: string
+  events?: Event[]
 }
