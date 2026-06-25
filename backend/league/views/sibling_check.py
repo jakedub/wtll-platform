@@ -153,3 +153,18 @@ class SiblingCheckView(APIView):
             "younger_sibling_eligible_count": younger_sibling_eligible_count,
             "groups": groups,
         })
+
+    def post(self, request):
+        """
+        POST /api/players/sibling-check/
+        Body: { "player_ids": [1, 2, 3] }
+
+        Marks the given players as is_eligible=True (younger-sibling rule applied).
+        Returns the count of players updated.
+        """
+        player_ids = request.data.get("player_ids", [])
+        if not isinstance(player_ids, list) or not player_ids:
+            return Response({"error": "player_ids must be a non-empty list."}, status=400)
+
+        updated = Player.objects.filter(id__in=player_ids).update(is_eligible=True)
+        return Response({"updated": updated})

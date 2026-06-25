@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
             name="BoundaryLeague",
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("league_id", models.IntegerField(unique=True)),
+                ("league_id", models.CharField(max_length=100, unique=True)),
                 ("league_name", models.CharField(max_length=200)),
                 ("league_location", models.CharField(blank=True, max_length=200)),
                 ("official_name", models.CharField(blank=True, max_length=200)),

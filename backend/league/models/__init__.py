@@ -28,4 +28,5 @@ from .boundary import BoundaryLeague, GeneratedKML
 from .auth_token import LoginToken
 from .location import LeagueLocation, LocationField
 from .site_settings import SiteSettings, LeagueIdentity
-from .fundraising import FacilitiesLineItem, FundraisingCampaign, FundraisingDeposit
+from .fundraising import FundraisingPlan, FundraisingLineItem, FundraisingCampaign, FundraisingDeposit
+from .board_hub import BoardCalendarEvent, BoardChecklistItem

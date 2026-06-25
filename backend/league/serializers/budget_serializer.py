@@ -10,8 +10,9 @@ class BudgetLineSerializer(serializers.ModelSerializer):
         model = BudgetLine
         fields = [
             "id", "year", "category", "category_display",
-            "item", "sub_group", "owner_role", "is_revenue",
+            "item", "sub_group", "division", "owner_role", "is_revenue",
             "actual", "estimate", "estimate_override",
+            "quantity", "unit_cost",
             "effective_estimate", "notes", "sort_order",
             "created_at", "updated_at",
         ]

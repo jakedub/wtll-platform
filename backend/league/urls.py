@@ -101,7 +101,8 @@ from league.views.auth import (
 from league.views.schedule_generator import ScheduleGenerateView, ScheduleExportView
 from league.views.site_settings import SiteSettingsView, LeagueIdentityView, PublicLeagueIdentityView
 from league.views.fundraising import (
-    LineItemListCreateView, LineItemDetailView,
+    PlanListCreateView, PlanDetailView,
+    LineItemListCreateView, LineItemDetailView, LineItemReorderView,
     CampaignListCreateView, CampaignDetailView,
     DepositListCreateView, DepositDetailView,
     FundraisingSummaryView,
@@ -109,6 +110,10 @@ from league.views.fundraising import (
 from league.views.locations import (
     LeagueLocationListCreateView, LeagueLocationDetailView,
     LocationFieldListCreateView, LocationFieldDetailView,
+)
+from league.views.board_hub import (
+    CalendarEventListCreateView, CalendarEventDetailView,
+    ChecklistItemListCreateView, ChecklistItemDetailView,
 )
 
 
@@ -306,12 +311,24 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     path("locations/<int:location_pk>/fields/",                 LocationFieldListCreateView.as_view(),  name="location-field-list"),
     path("locations/<int:location_pk>/fields/<int:field_pk>/",  LocationFieldDetailView.as_view(),      name="location-field-detail"),
 
-    # Fundraising
+    # Fundraising — plans
+    path("fundraising/plans/",                                PlanListCreateView.as_view(),         name="fundraising-plans"),
+    path("fundraising/plans/<int:pk>/",                       PlanDetailView.as_view(),             name="fundraising-plan-detail"),
+    # Fundraising — line items
     path("fundraising/summary/",                              FundraisingSummaryView.as_view(),     name="fundraising-summary"),
+    path("fundraising/line-items/reorder/",                   LineItemReorderView.as_view(),        name="fundraising-line-items-reorder"),
     path("fundraising/line-items/",                           LineItemListCreateView.as_view(),     name="fundraising-line-items"),
     path("fundraising/line-items/<int:pk>/",                  LineItemDetailView.as_view(),         name="fundraising-line-item-detail"),
+    # Fundraising — campaigns + deposits
     path("fundraising/campaigns/",                            CampaignListCreateView.as_view(),     name="fundraising-campaigns"),
     path("fundraising/campaigns/<int:pk>/",                   CampaignDetailView.as_view(),         name="fundraising-campaign-detail"),
     path("fundraising/campaigns/<int:campaign_pk>/deposits/", DepositListCreateView.as_view(),      name="fundraising-deposits"),
     path("fundraising/deposits/<int:pk>/",                    DepositDetailView.as_view(),          name="fundraising-deposit-detail"),
+
+    # Board Operations Hub — Calendar
+    path("board-hub/calendar/",             CalendarEventListCreateView.as_view(),  name="board-hub-calendar"),
+    path("board-hub/calendar/<int:pk>/",    CalendarEventDetailView.as_view(),      name="board-hub-calendar-detail"),
+    # Board Operations Hub — Checklist
+    path("board-hub/checklist/",            ChecklistItemListCreateView.as_view(),  name="board-hub-checklist"),
+    path("board-hub/checklist/<int:pk>/",   ChecklistItemDetailView.as_view(),      name="board-hub-checklist-detail"),
 ]

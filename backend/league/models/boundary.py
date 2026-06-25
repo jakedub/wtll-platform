@@ -13,7 +13,7 @@ class BoundaryLeague(models.Model):
     Sourced from ll_initial.json; editable at runtime via the Boundaries page.
     """
 
-    league_id = models.IntegerField(unique=True)
+    league_id = models.CharField(max_length=100, unique=True)
     league_name = models.CharField(max_length=200)
     league_location = models.CharField(max_length=200, blank=True)
     official_name = models.CharField(max_length=200, blank=True)
@@ -22,6 +22,10 @@ class BoundaryLeague(models.Model):
     district = models.IntegerField(null=True, blank=True)
 
     is_district_league = models.BooleanField(default=True)
+
+    # Physical address of the league's home facility
+    address = models.CharField(max_length=255, blank=True, default="",
+                               help_text="Full street address for this league's home facility")
 
     # Raw shape data: list of {coordinates: [{lat, lng}]} objects (from LL Finder API)
     shape_components = models.JSONField(default=list)

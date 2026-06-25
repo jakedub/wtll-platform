@@ -78,6 +78,45 @@ class PlayerDetailView(generics.RetrieveUpdateAPIView):
         )
 
     def partial_update(self, request, *args, **kwargs):
+        # 'division' lives on PlayerProgramEnrollment, not Player.
+        # Update the enrollment BEFORE running the serializer so the
+        # response's division_name reflects the new value.
+        raw_division = request.data.get("division", None)
+        print(f"[division] raw_division={raw_division!r}", flush=True)
+
+        if raw_division is not None:
+            player = self.get_object()
+            enrollment = (
+                PlayerProgramEnrollment.objects
+                .filter(player=player)
+                .order_by("-id")
+                .first()
+            )
+            print(f"[division] enrollment={enrollment!r}", flush=True)
+            new_div_id = int(raw_division) if raw_division not in ("", None) else None
+            print(f"[division] setting division_id → {new_div_id!r}", flush=True)
+            if enrollment:
+                enrollment.division_id = new_div_id
+                enrollment.save(update_fields=["division"])
+            else:
+                # Player has no enrollment yet — create one against the
+                # most recent active program matching the player's sport.
+                from league.models.program import Program
+                sport = player.sport or "baseball"
+                program = (
+                    Program.objects
+                    .filter(is_active=True, sport__iexact=sport)
+                    .order_by("-season_year", "-id")
+                    .first()
+                ) or Program.objects.order_by("-season_year", "-id").first()
+                if program:
+                    PlayerProgramEnrollment.objects.create(
+                        player=player,
+                        program=program,
+                        division_id=new_div_id,
+                    )
+                    print(f"[division] created enrollment in program={program}", flush=True)
+
         kwargs["partial"] = True
         return self.update(request, *args, **kwargs)
 

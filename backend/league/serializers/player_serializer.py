@@ -11,6 +11,7 @@ class PlayerSerializer(serializers.ModelSerializer):
     catcher_tier   = serializers.SerializerMethodField()
     # Roster display helpers
     division_name      = serializers.SerializerMethodField()
+    division_id        = serializers.SerializerMethodField()
     team_name          = serializers.SerializerMethodField()
     eligibility_reason = serializers.SerializerMethodField()
 
@@ -34,13 +35,13 @@ class PlayerSerializer(serializers.ModelSerializer):
             "latitude", "longitude", "in_district", "district_checked_at",
             "school_name", "teammate_request", "coach_request", "jersey_size",
             "tier", "tier_spot", "overall_total", "pitcher_tier", "catcher_tier",
-            "division_name", "team_name", "eligibility_reason",
+            "division_name", "division_id", "team_name", "eligibility_reason",
             "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "created_at", "updated_at", "full_name",
             "tier_spot", "overall_total", "pitcher_tier", "catcher_tier",
-            "division_name", "team_name", "eligibility_reason",
+            "division_name", "division_id", "team_name", "eligibility_reason",
             "is_eligible", "in_district", "district_checked_at", "latitude", "longitude",
             "archived_at",
         ]
@@ -60,19 +61,23 @@ class PlayerSerializer(serializers.ModelSerializer):
     def get_catcher_tier(self, obj):
         return obj.catcher_tier_computed
 
+    def _latest_enrollment(self, obj):
+        return obj.enrollments.select_related("division", "team").order_by("-id").first()
+
     def get_division_name(self, obj):
-        """Return division from the most recent active enrollment."""
-        enrollment = obj.enrollments.select_related("division").order_by("-id").first()
-        if enrollment and enrollment.division:
-            return enrollment.division.name
-        return None
+        """Return division name from the most recent active enrollment."""
+        e = self._latest_enrollment(obj)
+        return e.division.name if e and e.division else None
+
+    def get_division_id(self, obj):
+        """Return division PK from the most recent active enrollment."""
+        e = self._latest_enrollment(obj)
+        return e.division_id if e else None
 
     def get_team_name(self, obj):
-        """Return team from the most recent active enrollment."""
-        enrollment = obj.enrollments.select_related("team").order_by("-id").first()
-        if enrollment and enrollment.team:
-            return enrollment.team.name
-        return None
+        """Return team name from the most recent active enrollment."""
+        e = self._latest_enrollment(obj)
+        return e.team.name if e and e.team else None
 
     def get_eligibility_reason(self, obj):
         """Why this player is (or isn't) eligible."""

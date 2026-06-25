@@ -65,7 +65,8 @@ def seed_kml(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("league", "0044_boundary_league_generated_kml"),
+        # 0048 alters league_id from IntegerField → CharField before we seed
+        ("league", "0048_boundaryleague_league_id_to_charfield"),
     ]
 
     operations = [

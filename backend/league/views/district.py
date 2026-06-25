@@ -262,18 +262,37 @@ class CheckCsvDistrictView(APIView):
 
 # ── League CRUD ───────────────────────────────────────────────────────────────
 
-def _serialize_league(league) -> dict:
-    return {
+def _serialize_league(league, include_locations: bool = False) -> dict:
+    d = {
         "id": league.id,
         "league_id": league.league_id,
         "league_name": league.league_name,
         "league_location": league.league_location,
         "official_name": league.official_name,
+        "address": getattr(league, "address", ""),
         "district": league.district,
         "is_district_league": league.is_district_league,
         "shape_components": league.shape_components,
         "shared_boundary_with": league.shared_boundary_with,
     }
+    if include_locations:
+        # Inline the linked LeagueLocation records (name + id + is_home only — no fields)
+        try:
+            d["linked_locations"] = [
+                {
+                    "id": loc.id,
+                    "name": loc.name,
+                    "short_name": loc.short_name,
+                    "city": loc.city,
+                    "state": loc.state,
+                    "is_home": loc.is_home,
+                    "field_count": loc.fields.count(),
+                }
+                for loc in league.locations.prefetch_related("fields").all()
+            ]
+        except Exception:
+            d["linked_locations"] = []
+    return d
 
 
 class BoundaryLeagueListView(APIView):
@@ -284,8 +303,12 @@ class BoundaryLeagueListView(APIView):
 
     def get(self, request):
         from league.models.boundary import BoundaryLeague
-        leagues = list(BoundaryLeague.objects.all())
-        return Response([_serialize_league(lg) for lg in leagues])
+        include_locs = request.query_params.get("include_locations", "false").lower() == "true"
+        qs = BoundaryLeague.objects.all()
+        if include_locs:
+            qs = qs.prefetch_related("locations__fields")
+        leagues = list(qs)
+        return Response([_serialize_league(lg, include_locations=include_locs) for lg in leagues])
 
     def post(self, request):
         from league.models.boundary import BoundaryLeague
@@ -329,7 +352,7 @@ class BoundaryLeagueDetailView(APIView):
             return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         allowed = {
-            "league_name", "league_location", "official_name",
+            "league_name", "league_location", "official_name", "address",
             "district", "is_district_league", "shape_components", "shared_boundary_with",
         }
         for field, value in request.data.items():

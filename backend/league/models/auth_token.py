@@ -8,7 +8,17 @@ from django.utils import timezone
 from datetime import timedelta
 
 
-TOKEN_TTL_MINUTES = 15
+TOKEN_TTL_MINUTES = 15  # Fallback default if SiteSettings not yet seeded
+
+
+def _get_ttl_minutes() -> int:
+    """Read the TTL from SiteSettings; fall back to the module constant."""
+    try:
+        from league.models.site_settings import SiteSettings
+        s = SiteSettings.objects.filter(pk=1).values_list("magic_link_expiry_minutes", flat=True).first()
+        return s if s is not None else TOKEN_TTL_MINUTES
+    except Exception:
+        return TOKEN_TTL_MINUTES
 
 
 class LoginToken(models.Model):
@@ -25,7 +35,7 @@ class LoginToken(models.Model):
 
     @property
     def is_expired(self) -> bool:
-        return timezone.now() > self.created_at + timedelta(minutes=TOKEN_TTL_MINUTES)
+        return timezone.now() > self.created_at + timedelta(minutes=_get_ttl_minutes())
 
     @property
     def is_valid(self) -> bool:

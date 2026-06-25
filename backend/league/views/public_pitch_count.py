@@ -1,7 +1,8 @@
 """
 Public pitch-count summary endpoint.
-Returns all flagged pitchers (is_pitcher=True, baseball, not archived)
-with their current rest status.  No authentication required.
+Returns flagged pitchers (is_pitcher=True) by default.
+Pass ?pitchers_only=false to also include non-pitcher players who have pitch logs.
+No authentication required (role gating is handled in the frontend via PublicRoleGate).
 """
 from datetime import date
 from rest_framework.views import APIView
@@ -18,15 +19,27 @@ class PublicPitchCountView(APIView):
 
     def get(self, request):
         today = date.today()
+        pitchers_only = request.query_params.get("pitchers_only", "true").lower() != "false"
 
-        # All active, non-archived pitchers
-        pitchers = (
-            Player.objects
-            .filter(is_pitcher=True, is_archived=False, is_active=True)
-            .filter(sport__in=["baseball", "", None])
-            .prefetch_related("enrollments__division", "enrollments__team")
-            .order_by("last_name", "first_name")
-        )
+        if pitchers_only:
+            # Default: flagged pitchers only
+            pitchers = (
+                Player.objects
+                .filter(is_pitcher=True, is_archived=False, is_active=True)
+                .filter(sport__in=["baseball", "", None])
+                .prefetch_related("enrollments__division", "enrollments__team")
+                .order_by("last_name", "first_name")
+            )
+        else:
+            # All players who have logged at least one pitch entry
+            pitcher_ids = PitchCount.objects.values_list("player_id", flat=True).distinct()
+            pitchers = (
+                Player.objects
+                .filter(id__in=pitcher_ids, is_archived=False, is_active=True)
+                .filter(sport__in=["baseball", "", None])
+                .prefetch_related("enrollments__division", "enrollments__team")
+                .order_by("last_name", "first_name")
+            )
 
         # Pitches thrown today keyed by player id
         today_entries = (

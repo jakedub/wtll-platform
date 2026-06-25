@@ -2,6 +2,19 @@ from decimal import Decimal
 from django.db import models
 
 
+BUDGET_DIVISIONS = [
+    # Baseball
+    ("TEE_BALL",   "Tee Ball"),
+    ("PEE_WEE",    "Pee Wee"),
+    ("AAA",        "AAA"),
+    ("MAJORS",     "Majors"),
+    # Softball
+    ("SF_MINORS",  "Softball Minors"),
+    ("SF_MAJORS",  "Softball Majors"),
+    # Cross-sport
+    ("ALL_DIV",    "All Divisions"),
+]
+
 BUDGET_CATEGORIES = [
     ("BASEBALL",     "Baseball"),
     ("SOFTBALL",     "Softball"),
@@ -41,6 +54,21 @@ class BudgetLine(models.Model):
     # When True the estimate was hand-entered; when False it auto-follows actual * 1.05
     estimate_override = models.BooleanField(default=False)
 
+    # Quantity-based pricing — when both are set, total = quantity × unit_cost
+    quantity = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Number of units (e.g. 44 teams × $10 = $440).",
+    )
+    unit_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Cost per unit. Total = quantity × unit_cost.",
+    )
+
+    division = models.CharField(
+        max_length=20, blank=True, choices=BUDGET_DIVISIONS,
+        help_text="Baseball/Softball division this item applies to. Leave blank for cross-division items.",
+    )
+
     sub_group = models.CharField(
         max_length=100, blank=True,
         help_text="Optional grouping within a category (e.g. 'Regular Season', 'Winter Workout')",
@@ -59,7 +87,15 @@ class BudgetLine(models.Model):
 
     @property
     def effective_estimate(self):
-        """The estimate to display: hand-entered override or actual * 1.05."""
+        """
+        The estimate to display, in priority order:
+        1. quantity × unit_cost  (auto-calculated if both are set)
+        2. hand-entered estimate_override
+        3. actual × 1.05
+        4. estimate (may be None)
+        """
+        if self.quantity is not None and self.unit_cost is not None:
+            return (Decimal(self.quantity) * self.unit_cost).quantize(Decimal("0.01"))
         if self.estimate_override and self.estimate is not None:
             return self.estimate
         if self.actual is not None:
