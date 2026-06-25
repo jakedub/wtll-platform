@@ -23,11 +23,12 @@ def _require_admin(request) -> Optional[Response]:
 
 def _serialize_site_settings(s) -> dict:
     return {
-        "umpire_signups_enabled":    s.umpire_signups_enabled,
-        "volunteer_signups_enabled": s.volunteer_signups_enabled,
-        "magic_link_expiry_minutes": s.magic_link_expiry_minutes,
-        "default_program_id":        s.default_program_id,
-        "default_program_name":      s.default_program.name if s.default_program else None,
+        "umpire_signups_enabled":     s.umpire_signups_enabled,
+        "volunteer_signups_enabled":  s.volunteer_signups_enabled,
+        "evaluation_signups_enabled": s.evaluation_signups_enabled,
+        "magic_link_expiry_minutes":  s.magic_link_expiry_minutes,
+        "default_program_id":         s.default_program_id,
+        "default_program_name":       s.default_program.name if s.default_program else None,
     }
 
 
@@ -67,6 +68,7 @@ class SiteSettingsView(APIView):
 
         allowed = {
             "umpire_signups_enabled", "volunteer_signups_enabled",
+            "evaluation_signups_enabled",
             "magic_link_expiry_minutes", "default_program_id",
         }
         for field, value in request.data.items():

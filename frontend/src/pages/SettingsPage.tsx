@@ -24,6 +24,7 @@ import PaletteIcon from "@mui/icons-material/Palette"
 import PersonIcon from "@mui/icons-material/Person"
 import SearchIcon from "@mui/icons-material/Search"
 import SettingsIcon from "@mui/icons-material/Settings"
+import AssessmentIcon from "@mui/icons-material/Assessment"
 import SportsIcon from "@mui/icons-material/Sports"
 import TuneIcon from "@mui/icons-material/Tune"
 import VolunteerActivismIcon from "@mui/icons-material/VolunteerActivism"
@@ -339,6 +340,7 @@ function UserRow({ user, currentUserId, onUpdated }: {
 interface SiteSettingsData {
   umpire_signups_enabled: boolean
   volunteer_signups_enabled: boolean
+  evaluation_signups_enabled: boolean
   magic_link_expiry_minutes: number
   default_program_id: number | null
   default_program_name: string | null
@@ -488,6 +490,33 @@ function SiteSettingsTab() {
                 bgcolor: data.volunteer_signups_enabled ? "#e8f5e9" : "#f5f5f5",
                 color: data.volunteer_signups_enabled ? "#2e7d32" : "#aaa",
                 "& .MuiChip-icon": { color: data.volunteer_signups_enabled ? "#2e7d32" : "#ccc" },
+              }}
+            />
+          </Box>
+        </SettingRow>
+
+        <Divider />
+
+        <SettingRow
+          label="Evaluation Sign-Ups"
+          description="Opens the public player evaluation registration pages for all evaluation events."
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            {saved === "evaluation_signups_enabled" && <CheckIcon sx={{ fontSize: 16, color: "#2e7d32" }} />}
+            <Switch
+              checked={data.evaluation_signups_enabled}
+              disabled={saving === "evaluation_signups_enabled"}
+              onChange={e => patch("evaluation_signups_enabled", e.target.checked)}
+            />
+            <Chip
+              label={data.evaluation_signups_enabled ? "Live" : "Disabled"}
+              size="small"
+              icon={<AssessmentIcon sx={{ fontSize: "12px !important" }} />}
+              sx={{
+                height: 20, fontSize: "0.65rem", fontWeight: 700,
+                bgcolor: data.evaluation_signups_enabled ? "#e8f5e9" : "#f5f5f5",
+                color: data.evaluation_signups_enabled ? "#2e7d32" : "#aaa",
+                "& .MuiChip-icon": { color: data.evaluation_signups_enabled ? "#2e7d32" : "#ccc" },
               }}
             />
           </Box>

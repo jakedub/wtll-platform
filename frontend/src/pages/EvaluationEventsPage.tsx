@@ -39,7 +39,6 @@ async function patchEvent(id: number, data: any): Promise<EvalEvent> { return (a
 async function deleteEvent(id: number): Promise<void> { await client.delete(`/eval-events/${id}/`) }
 async function getDetail(id: number) { return (await client.get(`/eval-events/${id}/`)).data }
 async function regenerate(id: number) { return (await client.post(`/eval-events/${id}/regenerate/`)).data }
-async function togglePublic(id: number, val: boolean): Promise<EvalEvent> { return (await client.post(`/eval-events/${id}/public/`, { is_public: val })).data }
 async function deleteReg(id: number): Promise<void> { await client.delete(`/eval-events/registrations/${id}/`) }
 
 function CreateDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (e: EvalEvent) => void }) {
@@ -156,7 +155,6 @@ function EventCard({ event, onUpdated, onDeleted }: { event: EvalEvent; onUpdate
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState<{ slots: Slot[]; divisions: any[] } | null>(null)
   const [loading, setLoading] = useState(false)
-  const [toggling, setToggling] = useState(false)
   const [regen, setRegen] = useState(false)
   const [regenMsg, setRegenMsg] = useState<string | null>(null)
 
@@ -169,12 +167,6 @@ function EventCard({ event, onUpdated, onDeleted }: { event: EvalEvent; onUpdate
   const handleExpand = () => {
     if (!open && !detail) loadDetail()
     setOpen(v => !v)
-  }
-
-  const handleTogglePublic = async () => {
-    setToggling(true)
-    try { onUpdated(await togglePublic(event.id, !event.is_public)) }
-    finally { setToggling(false) }
   }
 
   const handleRegen = async () => {
@@ -192,7 +184,7 @@ function EventCard({ event, onUpdated, onDeleted }: { event: EvalEvent; onUpdate
   const publicURL = `${window.location.origin}/public/evaluations/${event.id}`
 
   return (
-    <Paper elevation={0} sx={{ border: `1px solid ${event.is_public ? "#2e7d3260" : "#e4e4e7"}`, borderRadius: 2, overflow: "hidden", mb: 2 }}>
+    <Paper elevation={0} sx={{ border: "1px solid #e4e4e7", borderRadius: 2, overflow: "hidden", mb: 2 }}>
       <Box onClick={handleExpand} sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2.5, py: 1.5, cursor: "pointer", bgcolor: "#fafafa", "&:hover": { bgcolor: "#f4f4f5" } }}>
         <Box sx={{ flex: 1 }}>
           <Typography sx={{ fontWeight: 700, fontSize: "0.92rem" }}>{event.name}</Typography>
@@ -214,23 +206,16 @@ function EventCard({ event, onUpdated, onDeleted }: { event: EvalEvent; onUpdate
         )}
         <Chip label={`${event.slot_count} slots`} size="small" sx={{ height: 20, fontSize: "0.68rem", bgcolor: "#f4f4f5" }} />
         <Chip label={`${event.registration_count} registered`} size="small" sx={{ height: 20, fontSize: "0.68rem", bgcolor: event.registration_count > 0 ? "#e8f5e9" : "#f4f4f5", color: event.registration_count > 0 ? "#2e7d32" : "#888" }} />
-        <Tooltip title={event.is_public ? "Public sign-up is LIVE" : "Enable public sign-up"}>
-          <Switch checked={event.is_public} size="small" disabled={toggling}
-            onClick={e => { e.stopPropagation(); handleTogglePublic() }}
-            sx={{ "& .MuiSwitch-switchBase.Mui-checked": { color: "#2e7d32" }, "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": { bgcolor: "#2e7d32" } }} />
-        </Tooltip>
         {open ? <ExpandLessIcon sx={{ fontSize: 18, color: "#aaa" }} /> : <ExpandMoreIcon sx={{ fontSize: 18, color: "#aaa" }} />}
       </Box>
 
       <Collapse in={open}>
         <Box sx={{ px: 2.5, py: 2 }}>
-          {event.is_public && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2, p: 1.25, bgcolor: "#f1f8f1", border: "1px solid #2e7d3240", borderRadius: 1.5 }}>
-              <LinkIcon sx={{ fontSize: 16, color: "#2e7d32" }} />
-              <Typography sx={{ fontSize: "0.78rem", color: "#2e7d32", fontWeight: 600 }}>Public: </Typography>
-              <Typography component="a" href={publicURL} target="_blank" sx={{ fontSize: "0.75rem", color: "#1565c0" }}>{publicURL}</Typography>
-            </Box>
-          )}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2, p: 1.25, bgcolor: "#f4f4f5", border: "1px solid #e4e4e7", borderRadius: 1.5 }}>
+            <LinkIcon sx={{ fontSize: 16, color: "#888" }} />
+            <Typography sx={{ fontSize: "0.78rem", color: "#555", fontWeight: 600 }}>Public link: </Typography>
+            <Typography component="a" href={publicURL} target="_blank" sx={{ fontSize: "0.75rem", color: "#1565c0" }}>{publicURL}</Typography>
+          </Box>
           <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
             <Button size="small" variant="outlined" color="inherit" startIcon={regen ? <CircularProgress size={12} /> : <SyncIcon />}
               onClick={handleRegen} disabled={regen}>Regenerate Slots</Button>

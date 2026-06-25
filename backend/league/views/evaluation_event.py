@@ -187,9 +187,12 @@ class EvaluationRegistrationsView(APIView):
 # ── Public views ──────────────────────────────────────────────────────────────
 
 class EvaluationPublicListView(APIView):
-    """GET /api/eval-events/public/ — all public evaluation events with slot availability."""
+    """GET /api/eval-events/public/ — all evaluation events (gated by SiteSettings global toggle)."""
     def get(self, request):
-        events = EvaluationEvent.objects.filter(is_public=True).select_related("program").order_by("eval_date")
+        from league.models.site_settings import SiteSettings
+        if not SiteSettings.get().evaluation_signups_enabled:
+            return Response([])
+        events = EvaluationEvent.objects.all().select_related("program").order_by("eval_date")
         result = []
         for event in events:
             slots = event.slots.prefetch_related("registration").order_by("slot_number")
@@ -254,7 +257,10 @@ class EvaluationPublicRegisterView(APIView):
         if not all([event_id, slot_id, division_id, parent_name, player_name]):
             return Response({"error": "event_id, slot_id, division_id, parent_name, and player_name are required."}, status=400)
 
-        event = get_object_or_404(EvaluationEvent, pk=event_id, is_public=True)
+        from league.models.site_settings import SiteSettings
+        if not SiteSettings.get().evaluation_signups_enabled:
+            return Response({"error": "Evaluation sign-ups are currently closed."}, status=403)
+        event = get_object_or_404(EvaluationEvent, pk=event_id)
         slot  = get_object_or_404(EvaluationTimeSlot, pk=slot_id, event=event)
 
         # Check slot not already taken
