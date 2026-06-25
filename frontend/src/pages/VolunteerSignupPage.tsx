@@ -499,9 +499,6 @@ export default function VolunteerSignupPage({ isPublic = false }: { isPublic?: b
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
-  const [publicEnabled, setPublicEnabled] = useState(false)
-  const [publicLoading, setPublicLoading] = useState(false)
-
   // Single signup dialog
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeGame, setActiveGame] = useState<VolunteerGame | null>(null)
@@ -510,20 +507,6 @@ export default function VolunteerSignupPage({ isPublic = false }: { isPublic?: b
 
   // Multi signup dialog
   const [multiOpen, setMultiOpen] = useState(false)
-
-  useEffect(() => {
-    client.get("/volunteers/public-config/").then(r => setPublicEnabled(r.data.is_enabled)).catch(() => {})
-  }, [])
-
-  const togglePublic = async () => {
-    setPublicLoading(true)
-    try {
-      const r = await client.post("/volunteers/public-config/", { is_enabled: !publicEnabled })
-      setPublicEnabled(r.data.is_enabled)
-    } finally { setPublicLoading(false) }
-  }
-
-  const publicURL = `${window.location.origin}/public/volunteer-signups`
 
   const load = async (all = showAll) => {
     setLoading(true); setError(null)
@@ -578,29 +561,6 @@ export default function VolunteerSignupPage({ isPublic = false }: { isPublic?: b
 
   return (
     <Box>
-      {/* Admin-only: public access toggle */}
-      {!isPublic && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2, p: 1.5, bgcolor: publicEnabled ? "#f1f8f1" : "#fafafa", border: `1px solid ${publicEnabled ? "#2e7d32" : "#e4e4e7"}`, borderRadius: 1.5 }}>
-          <Box sx={{ flex: 1 }}>
-            <Typography sx={{ fontWeight: 600, fontSize: "0.82rem", color: publicEnabled ? "#2e7d32" : "#555" }}>
-              {publicEnabled ? "✅ Public sign-up is LIVE" : "🔒 Public sign-up is disabled"}
-            </Typography>
-            {publicEnabled && (
-              <Typography sx={{ fontSize: "0.72rem", color: "#555", mt: 0.25 }}>
-                Share: <a href={publicURL} target="_blank" rel="noopener noreferrer" style={{ color: "#1565c0" }}>{publicURL}</a>
-              </Typography>
-            )}
-          </Box>
-          <button
-            onClick={togglePublic}
-            disabled={publicLoading}
-            style={{ padding: "4px 14px", borderRadius: 6, border: "1px solid #ccc", cursor: "pointer", fontSize: "0.78rem", background: publicEnabled ? "#fdecea" : "#e8f5e9", color: publicEnabled ? RED : "#2e7d32", fontWeight: 600 }}
-          >
-            {publicLoading ? "…" : publicEnabled ? "Disable" : "Enable Public Access"}
-          </button>
-        </Box>
-      )}
-
       {/* Header */}
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>

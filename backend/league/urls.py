@@ -94,7 +94,22 @@ from league.views.vendors import (
     VendorBoardRolesView,
 )
 from league.views.sibling_check import SiblingCheckView
-from league.views.auth import RequestLoginView, VerifyTokenView, MeView, LogoutView
+from league.views.auth import (
+    RequestLoginView, VerifyTokenView, MeView, LogoutView,
+    UserListView, UserInviteView, UserDetailView,
+)
+from league.views.schedule_generator import ScheduleGenerateView, ScheduleExportView
+from league.views.site_settings import SiteSettingsView, LeagueIdentityView, PublicLeagueIdentityView
+from league.views.fundraising import (
+    LineItemListCreateView, LineItemDetailView,
+    CampaignListCreateView, CampaignDetailView,
+    DepositListCreateView, DepositDetailView,
+    FundraisingSummaryView,
+)
+from league.views.locations import (
+    LeagueLocationListCreateView, LeagueLocationDetailView,
+    LocationFieldListCreateView, LocationFieldDetailView,
+)
 
 
 
@@ -256,10 +271,14 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     path("district-leaders/<int:pk>/",      DistrictLeaderDetailView.as_view(),    name="district-leader-detail"),
 
     # Authentication (magic link / passwordless)
-    path("auth/request-login/", RequestLoginView.as_view(), name="auth-request-login"),
-    path("auth/verify/",         VerifyTokenView.as_view(),  name="auth-verify"),
-    path("auth/me/",             MeView.as_view(),           name="auth-me"),
-    path("auth/logout/",         LogoutView.as_view(),       name="auth-logout"),
+    path("auth/request-login/", RequestLoginView.as_view(),  name="auth-request-login"),
+    path("auth/verify/",         VerifyTokenView.as_view(),   name="auth-verify"),
+    path("auth/me/",             MeView.as_view(),            name="auth-me"),
+    path("auth/logout/",         LogoutView.as_view(),        name="auth-logout"),
+    # User management (admin only)
+    path("auth/users/",          UserListView.as_view(),      name="auth-user-list"),
+    path("auth/users/invite/",   UserInviteView.as_view(),    name="auth-user-invite"),
+    path("auth/users/<int:pk>/", UserDetailView.as_view(),    name="auth-user-detail"),
 
     # District / Eligibility
     path("district/check/", CheckPlayersInDistrictView.as_view(), name="district-check"),
@@ -271,4 +290,28 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     # Boundary league management
     path("district/leagues/", BoundaryLeagueListView.as_view(), name="boundary-league-list"),
     path("district/leagues/<int:pk>/", BoundaryLeagueDetailView.as_view(), name="boundary-league-detail"),
+
+    # Schedule Generator
+    path("schedules/generate/", ScheduleGenerateView.as_view(), name="schedule-generate"),
+    path("schedules/export/",   ScheduleExportView.as_view(),   name="schedule-export"),
+
+    # Site Settings + League Identity
+    path("settings/site/",            SiteSettingsView.as_view(),        name="site-settings"),
+    path("settings/league-identity/", LeagueIdentityView.as_view(),      name="league-identity"),
+    path("settings/public/",          PublicLeagueIdentityView.as_view(), name="league-identity-public"),
+
+    # League Locations
+    path("locations/",                                          LeagueLocationListCreateView.as_view(), name="location-list"),
+    path("locations/<int:pk>/",                                 LeagueLocationDetailView.as_view(),     name="location-detail"),
+    path("locations/<int:location_pk>/fields/",                 LocationFieldListCreateView.as_view(),  name="location-field-list"),
+    path("locations/<int:location_pk>/fields/<int:field_pk>/",  LocationFieldDetailView.as_view(),      name="location-field-detail"),
+
+    # Fundraising
+    path("fundraising/summary/",                              FundraisingSummaryView.as_view(),     name="fundraising-summary"),
+    path("fundraising/line-items/",                           LineItemListCreateView.as_view(),     name="fundraising-line-items"),
+    path("fundraising/line-items/<int:pk>/",                  LineItemDetailView.as_view(),         name="fundraising-line-item-detail"),
+    path("fundraising/campaigns/",                            CampaignListCreateView.as_view(),     name="fundraising-campaigns"),
+    path("fundraising/campaigns/<int:pk>/",                   CampaignDetailView.as_view(),         name="fundraising-campaign-detail"),
+    path("fundraising/campaigns/<int:campaign_pk>/deposits/", DepositListCreateView.as_view(),      name="fundraising-deposits"),
+    path("fundraising/deposits/<int:pk>/",                    DepositDetailView.as_view(),          name="fundraising-deposit-detail"),
 ]

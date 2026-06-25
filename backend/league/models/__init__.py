@@ -26,3 +26,6 @@ from .district_leader import DistrictLeader
 from .vendor import Vendor
 from .boundary import BoundaryLeague, GeneratedKML
 from .auth_token import LoginToken
+from .location import LeagueLocation, LocationField
+from .site_settings import SiteSettings, LeagueIdentity
+from .fundraising import FacilitiesLineItem, FundraisingCampaign, FundraisingDeposit

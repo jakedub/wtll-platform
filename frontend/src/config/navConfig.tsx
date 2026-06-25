@@ -25,6 +25,7 @@ import VolunteerActivismIcon from '@mui/icons-material/VolunteerActivism'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import LinkIcon from '@mui/icons-material/Link'
 import DateRangeIcon from '@mui/icons-material/DateRange'
+import CampaignIcon from '@mui/icons-material/Campaign'
 
 export interface NavItem {
   label: string
@@ -63,10 +64,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Board Members',     path: '/board-members',   icon: <PeopleIcon />,                description: 'Board roster with roles. President name auto-fills TVF forms.' },
       { label: 'Program Years',     path: '/program-years',   icon: <RocketLaunchIcon />,           description: 'Start new seasons and close completed programs.' },
       { label: 'Budget',            path: '/budget',          icon: <AccountBalanceWalletIcon />,   description: 'Annual operating budget — income, expenses, actuals.' },
+      { label: 'Fundraising',       path: '/fundraising',     icon: <CampaignIcon />,               description: 'Capital improvement campaigns and project progress tracker.' },
       { label: 'Documents & Bylaws',  path: '/documents',           icon: <FolderIcon />,             description: 'League bylaws, All Star forms, and board documents.' },
       { label: 'District Leadership', path: '/district-leadership',  icon: <BadgeIcon />,              description: 'District and HQ contacts — phone, email, and position.' },
       { label: 'Boundaries',          path: '/boundaries',           icon: <LocationOnIcon />,         description: 'Interactive map of WTLL, District 8, and District 7 league boundaries.' },
       { label: 'Vendors',             path: '/vendors',              icon: <StorefrontIcon />,          description: 'Vendor and supplier contacts — uniforms, equipment, trophies, and more.' },
+      { label: 'Locations',           path: '/locations',            icon: <LocationOnIcon />,          description: 'Manage parks, complexes, and fields used by WTLL and other leagues.' },
       { label: 'Recycling Bin',       path: '/recycling-bin',        icon: <DeleteSweepIcon />,        description: 'Archived and deleted player records.' },
     ],
   },
@@ -121,6 +124,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Baseball Schedule',      path: '/baseball-schedule',    icon: <SportsBaseballIcon />, description: 'Baseball game and practice schedule with ICS sync.' },
       { label: 'Softball Schedule',      path: '/softball-schedule',    icon: <CalendarMonthIcon />,  description: 'Softball game and practice schedule with ICS sync.' },
       { label: 'Entire Schedule',        path: '/team-calendars',       icon: <DateRangeIcon />,      description: 'All teams combined calendar view.' },
+      { label: 'Schedule Generator',     path: '/schedule-generator',   icon: <AssignmentIcon />,     description: 'Build round-robin schedules and export to SportsConnect.' },
       { label: 'Calendar Subscriptions', path: '/calendar-management',  icon: <LinkIcon />,           description: 'Manage ICS feed URLs for team calendars.' },
     ],
   },

@@ -51,6 +51,11 @@ import BudgetPage from './pages/BudgetPage'
 import DistrictLeadershipPage from './pages/DistrictLeadershipPage'
 import BoundariesPage from './pages/BoundariesPage'
 import VendorsPage from './pages/VendorsPage'
+import ScheduleGeneratorPage from './pages/ScheduleGeneratorPage'
+import LocationsPage from './pages/LocationsPage'
+import GuidePage from './pages/GuidePage'
+import SettingsPage from './pages/SettingsPage'
+import FundraisingPage from './pages/FundraisingPage'
 import LoginPage from './pages/LoginPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
 import { AuthProvider } from './context/AuthContext'
@@ -113,9 +118,14 @@ export default function App() {
             <Route path="/evaluation-events" element={<EvaluationEventsPage />} />
             <Route path="/calendar-management" element={<CalendarManagementPage />} />
                 <Route path="/budget" element={<BudgetPage />} />
+                <Route path="/fundraising" element={<FundraisingPage />} />
                 <Route path="/district-leadership" element={<DistrictLeadershipPage />} />
                 <Route path="/boundaries" element={<BoundariesPage />} />
                 <Route path="/vendors" element={<VendorsPage />} />
+                <Route path="/schedule-generator" element={<ScheduleGeneratorPage />} />
+                <Route path="/locations" element={<LocationsPage />} />
+                <Route path="/guide" element={<GuidePage />} />
+                <Route path="/settings" element={<SettingsPage />} />
               </Routes>
             </AppLayout>
             </ProtectedRoute>
