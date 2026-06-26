@@ -16,6 +16,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import GavelIcon from '@mui/icons-material/Gavel'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import FolderIcon from '@mui/icons-material/Folder'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
@@ -45,10 +46,18 @@ export interface NavSection {
   items: NavItem[]
 }
 
-// Custom bat icon inline to avoid import issues
+// Baseball bat silhouette — pointing lower-left (knob) to upper-right (barrel)
 const BatIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-    <path d="M3.5,18.5L9,13l2,2l-5.5,5.5L3.5,18.5z M21,3l-7,7l-2-2l7-7L21,3z M12,8l-6,6l2,2l6-6L12,8z" />
+    {/*
+      Outline (clockwise):
+        knob bottom (2,19) → arc around knob to knob top (4,21)
+        → handle top-side up to barrel (14.5,9.5) → (22,6)
+        → arc around barrel tip to (18,2)
+        → handle bottom-side back to (13.5,8.5)
+        → Z (closes back to knob bottom)
+    */}
+    <path d="M2 19A1.5 1.5 0 0 1 4 21L14.5 9.5 22 6A2.5 2.5 0 0 0 18 2L13.5 8.5Z" />
   </svg>
 )
 
@@ -63,14 +72,23 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Operations Hub',    path: '/board-hub',       icon: <DashboardIcon />,             description: 'Planning calendar, assignments, and board overview.' },
       { label: 'Board Members',     path: '/board-members',   icon: <PeopleIcon />,                description: 'Board roster with roles. President name auto-fills TVF forms.' },
       { label: 'Program Years',     path: '/program-years',   icon: <RocketLaunchIcon />,           description: 'Start new seasons and close completed programs.' },
-      { label: 'Budget',            path: '/budget',          icon: <AccountBalanceWalletIcon />,   description: 'Annual operating budget — income, expenses, actuals.' },
-      { label: 'Fundraising',       path: '/fundraising',     icon: <CampaignIcon />,               description: 'Capital improvement campaigns and project progress tracker.' },
       { label: 'Documents & Bylaws',  path: '/documents',           icon: <FolderIcon />,             description: 'League bylaws, All Star forms, and board documents.' },
       { label: 'District Leadership', path: '/district-leadership',  icon: <BadgeIcon />,              description: 'District and HQ contacts — phone, email, and position.' },
       { label: 'Boundaries',          path: '/boundaries',           icon: <LocationOnIcon />,         description: 'Interactive map of WTLL, District 8, and District 7 league boundaries.' },
       { label: 'Vendors',             path: '/vendors',              icon: <StorefrontIcon />,          description: 'Vendor and supplier contacts — uniforms, equipment, trophies, and more.' },
       { label: 'Locations',           path: '/locations',            icon: <LocationOnIcon />,          description: 'Manage parks, complexes, and fields used by WTLL and other leagues.' },
       { label: 'Recycling Bin',       path: '/recycling-bin',        icon: <DeleteSweepIcon />,        description: 'Archived and deleted player records.' },
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    icon: <AttachMoneyIcon />,
+    dashboardPath: '/section/finance',
+    color: '#2e7d32',   // deep green
+    items: [
+      { label: 'Budget',      path: '/budget',      icon: <AccountBalanceWalletIcon />, description: 'Annual operating budget — income, expenses, and actuals.' },
+      { label: 'Fundraising', path: '/fundraising', icon: <CampaignIcon />,             description: 'Capital improvement campaigns, plans, and project progress tracker.' },
     ],
   },
   {

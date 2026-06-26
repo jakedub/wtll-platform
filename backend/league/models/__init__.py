@@ -30,3 +30,4 @@ from .location import LeagueLocation, LocationField
 from .site_settings import SiteSettings, LeagueIdentity
 from .fundraising import FundraisingPlan, FundraisingLineItem, FundraisingCampaign, FundraisingDeposit
 from .board_hub import BoardCalendarEvent, BoardChecklistItem
+from .vendor import Vendor, VendorLocation

@@ -22,6 +22,16 @@ ALLOWED_HOSTS = config(
 # CSRF work correctly behind Railway's edge network.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# Production security hardening — only active when DEBUG=False.
+# Railway terminates TLS at the edge, so we don't redirect here, but we do
+# tell browsers to only send cookies over HTTPS and add HSTS.
+if not DEBUG:
+    SESSION_COOKIE_SECURE   = True
+    CSRF_COOKIE_SECURE      = True
+    SECURE_HSTS_SECONDS     = 31536000   # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_CONTENT_TYPE_NOSNIFF    = True
+
 # ─── Apps ─────────────────────────────────────────────────────────────────────
 
 INSTALLED_APPS = [

@@ -1,6 +1,8 @@
 /**
  * Vendors
  * Manage league vendor/supplier contacts — grouped by category.
+ * Shows products supplied, account info (with warning when name differs),
+ * and multiple physical locations per vendor.
  */
 import { useEffect, useState } from "react"
 import {
@@ -17,9 +19,24 @@ import LanguageIcon from "@mui/icons-material/Language"
 import PersonIcon from "@mui/icons-material/Person"
 import SearchIcon from "@mui/icons-material/Search"
 import StorefrontIcon from "@mui/icons-material/Storefront"
+import WarningAmberIcon from "@mui/icons-material/WarningAmber"
+import BadgeIcon from "@mui/icons-material/Badge"
+import PlaceIcon from "@mui/icons-material/Place"
+import InventoryIcon from "@mui/icons-material/Inventory"
 import client from "../api/client"
 
 const RED = "#C41230"
+
+interface VendorLocation {
+  id: number
+  label: string
+  address: string
+  phone: string
+  website: string
+  notes: string
+  is_primary: boolean
+  sort_order: number
+}
 
 interface Vendor {
   id: number
@@ -33,6 +50,10 @@ interface Vendor {
   notes: string
   board_role: string
   board_role_display: string
+  products: string
+  account_number: string
+  account_name: string
+  locations: VendorLocation[]
 }
 
 interface Choice { value: string; label: string }
@@ -72,8 +93,14 @@ const EMPTY_FORM = {
   website: "",
   notes: "",
   board_role: "",
+  products: "",
+  account_number: "",
+  account_name: "",
 }
 type FormState = typeof EMPTY_FORM
+
+const EMPTY_LOC = { label: "", address: "", phone: "", website: "", notes: "", is_primary: false, sort_order: 0 }
+type LocFormState = typeof EMPTY_LOC
 
 export default function VendorsPage() {
   const [vendors, setVendors]       = useState<Vendor[]>([])
@@ -84,16 +111,28 @@ export default function VendorsPage() {
   const [search, setSearch]         = useState("")
   const [catFilter, setCatFilter]   = useState<string>("all")
 
-  // Dialog
+  // Vendor dialog
   const [open, setOpen]           = useState(false)
   const [editing, setEditing]     = useState<Vendor | null>(null)
   const [form, setForm]           = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving]       = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Delete
+  // Delete vendor
   const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null)
   const [deleting, setDeleting]         = useState(false)
+
+  // Location dialog
+  const [locOpen, setLocOpen]         = useState(false)
+  const [locVendorId, setLocVendorId] = useState<number | null>(null)
+  const [locEditing, setLocEditing]   = useState<VendorLocation | null>(null)
+  const [locForm, setLocForm]         = useState<LocFormState>(EMPTY_LOC)
+  const [locSaving, setLocSaving]     = useState(false)
+  const [locError, setLocError]       = useState<string | null>(null)
+
+  // Delete location
+  const [deleteLoc, setDeleteLoc]     = useState<{ loc: VendorLocation; vendorName: string } | null>(null)
+  const [deletingLoc, setDeletingLoc] = useState(false)
 
   const load = () => {
     setLoading(true); setError(null)
@@ -118,11 +157,11 @@ export default function VendorsPage() {
   const filtered = vendors.filter(v => {
     if (catFilter !== "all" && v.category !== catFilter) return false
     if (!q) return true
-    return [v.name, v.contact_name, v.contact_email, v.notes, v.board_role_display, v.category_display]
+    return [v.name, v.contact_name, v.contact_email, v.notes, v.board_role_display,
+            v.category_display, v.products, v.account_number, v.account_name]
       .some(s => (s ?? "").toLowerCase().includes(q))
   })
 
-  // Group by category, preserving CATEGORY_COLORS order
   const catOrder = Object.keys(CATEGORY_COLORS)
   const grouped = filtered.reduce<Record<string, Vendor[]>>((acc, v) => {
     if (!acc[v.category]) acc[v.category] = []
@@ -133,7 +172,7 @@ export default function VendorsPage() {
     (a, b) => (catOrder.indexOf(a) ?? 99) - (catOrder.indexOf(b) ?? 99)
   )
 
-  // ── Dialog helpers ─────────────────────────────────────────────────────────
+  // ── Vendor dialog helpers ─────────────────────────────────────────────────────
   const openAdd = () => {
     setEditing(null)
     setForm({ ...EMPTY_FORM, category: catFilter !== "all" ? catFilter : "other" })
@@ -144,14 +183,17 @@ export default function VendorsPage() {
   const openEdit = (v: Vendor) => {
     setEditing(v)
     setForm({
-      name:          v.name,
-      category:      v.category,
-      contact_name:  v.contact_name,
-      contact_phone: v.contact_phone,
-      contact_email: v.contact_email,
-      website:       v.website,
-      notes:         v.notes,
-      board_role:    v.board_role,
+      name:           v.name,
+      category:       v.category,
+      contact_name:   v.contact_name,
+      contact_phone:  v.contact_phone,
+      contact_email:  v.contact_email,
+      website:        v.website,
+      notes:          v.notes,
+      board_role:     v.board_role,
+      products:       v.products,
+      account_number: v.account_number,
+      account_name:   v.account_name,
     })
     setSaveError(null)
     setOpen(true)
@@ -190,9 +232,62 @@ export default function VendorsPage() {
 
   const set = (f: keyof FormState, v: string) => setForm(p => ({ ...p, [f]: v }))
 
-  // ── Vendor card ────────────────────────────────────────────────────────────
+  // ── Location dialog helpers ───────────────────────────────────────────────────
+  const openAddLoc = (vendorId: number) => {
+    setLocVendorId(vendorId)
+    setLocEditing(null)
+    setLocForm(EMPTY_LOC)
+    setLocError(null)
+    setLocOpen(true)
+  }
+
+  const openEditLoc = (vendorId: number, loc: VendorLocation) => {
+    setLocVendorId(vendorId)
+    setLocEditing(loc)
+    setLocForm({
+      label: loc.label, address: loc.address, phone: loc.phone,
+      website: loc.website, notes: loc.notes, is_primary: loc.is_primary,
+      sort_order: loc.sort_order,
+    })
+    setLocError(null)
+    setLocOpen(true)
+  }
+
+  const handleLocSave = async () => {
+    if (!locForm.label.trim()) { setLocError("Location label is required."); return }
+    setLocSaving(true); setLocError(null)
+    try {
+      if (locEditing) {
+        await client.patch(`/vendors/locations/${locEditing.id}/`, locForm)
+      } else {
+        await client.post(`/vendors/${locVendorId}/locations/`, locForm)
+      }
+      setLocOpen(false)
+      load()
+    } catch (err: any) {
+      setLocError(err?.response?.data?.detail ?? "Save failed.")
+    } finally { setLocSaving(false) }
+  }
+
+  const handleLocDelete = async () => {
+    if (!deleteLoc) return
+    setDeletingLoc(true)
+    try {
+      await client.delete(`/vendors/locations/${deleteLoc.loc.id}/`)
+      setDeleteLoc(null)
+      load()
+    } finally { setDeletingLoc(false) }
+  }
+
+  const setLoc = (f: keyof LocFormState, v: string | boolean | number) =>
+    setLocForm(p => ({ ...p, [f]: v }))
+
+  // ── Vendor card ────────────────────────────────────────────────────────────────
   const VendorCard = ({ v }: { v: Vendor }) => {
     const color = CATEGORY_COLORS[v.category] ?? "#546e7a"
+    const products = v.products ? v.products.split(",").map(s => s.trim()).filter(Boolean) : []
+    const accountMismatch = v.account_name && v.account_name !== v.name
+
     return (
       <Box
         sx={{
@@ -281,6 +376,133 @@ export default function VendorsPage() {
             </Box>
           )}
         </Box>
+
+        {/* Products */}
+        {products.length > 0 && (
+          <Box sx={{ mt: 1.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
+              <InventoryIcon sx={{ fontSize: 12, color: "#aaa" }} />
+              <Typography sx={{ fontSize: "0.7rem", color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Products / Services
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+              {products.map((p, i) => (
+                <Chip
+                  key={i}
+                  label={p}
+                  size="small"
+                  sx={{ fontSize: "0.68rem", height: 20, bgcolor: "#f5f5f5", color: "#555", borderRadius: 1 }}
+                />
+              ))}
+            </Box>
+          </Box>
+        )}
+
+        {/* Account info */}
+        {(v.account_number || v.account_name) && (
+          <Box sx={{ mt: 1.5, p: 1, bgcolor: accountMismatch ? "#fff8e1" : "#f8f9fa", borderRadius: 1, border: accountMismatch ? "1px solid #ffe082" : "1px solid #f0f0f0" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
+              <BadgeIcon sx={{ fontSize: 12, color: accountMismatch ? "#f59e0b" : "#aaa" }} />
+              <Typography sx={{ fontSize: "0.7rem", color: accountMismatch ? "#f59e0b" : "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Account Info
+              </Typography>
+              {accountMismatch && (
+                <Tooltip title={`Account is under "${v.account_name}" — not WTLL's current name`}>
+                  <WarningAmberIcon sx={{ fontSize: 13, color: "#f59e0b", ml: "auto" }} />
+                </Tooltip>
+              )}
+            </Box>
+            {v.account_number && (
+              <Typography sx={{ fontSize: "0.78rem", color: "#333", fontWeight: 600 }}>
+                #{v.account_number}
+              </Typography>
+            )}
+            {accountMismatch && (
+              <Typography sx={{ fontSize: "0.72rem", color: "#b45309", mt: 0.25 }}>
+                Listed as: <em>{v.account_name}</em>
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {/* Locations */}
+        {(v.locations && v.locations.length > 0) && (
+          <Box sx={{ mt: 1.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
+              <PlaceIcon sx={{ fontSize: 12, color: "#aaa" }} />
+              <Typography sx={{ fontSize: "0.7rem", color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Locations
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+              {v.locations.map(loc => (
+                <Box
+                  key={loc.id}
+                  sx={{
+                    p: 1, borderRadius: 1, border: "1px solid #efefef", bgcolor: "#fafafa",
+                    position: "relative",
+                    "&:hover .loc-actions": { opacity: 1 },
+                  }}
+                >
+                  <Box className="loc-actions" sx={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 0.25, opacity: 0, transition: "opacity 0.15s" }}>
+                    <IconButton size="small" onClick={() => openEditLoc(v.id, loc)} sx={{ width: 22, height: 22, color: "#999" }}>
+                      <EditIcon sx={{ fontSize: 12 }} />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => setDeleteLoc({ loc, vendorName: v.name })} sx={{ width: 22, height: 22, color: "#999", "&:hover": { color: RED } }}>
+                      <DeleteIcon sx={{ fontSize: 12 }} />
+                    </IconButton>
+                  </Box>
+
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, pr: 5 }}>
+                    <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: "#333" }}>{loc.label}</Typography>
+                    {loc.is_primary && (
+                      <Chip label="Primary" size="small" sx={{ fontSize: "0.62rem", height: 16, bgcolor: "#e8f5e9", color: "#2e7d32", fontWeight: 700 }} />
+                    )}
+                  </Box>
+                  {loc.address && (
+                    <Typography sx={{ fontSize: "0.72rem", color: "#777", mt: 0.25 }}>{loc.address}</Typography>
+                  )}
+                  {loc.phone && (
+                    <Typography component="a" href={`tel:${loc.phone}`}
+                      sx={{ fontSize: "0.72rem", color: "#555", display: "block", mt: 0.25, textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>
+                      {loc.phone}
+                    </Typography>
+                  )}
+                  {loc.website && (
+                    <Typography component="a" href={loc.website} target="_blank" rel="noopener noreferrer"
+                      sx={{ fontSize: "0.72rem", color: "#1565c0", display: "block", mt: 0.25, textDecoration: "none", "&:hover": { textDecoration: "underline" }, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
+                      {loc.website.replace(/^https?:\/\/(www\.)?/, "")}
+                    </Typography>
+                  )}
+                  {loc.notes && (
+                    <Typography sx={{ fontSize: "0.7rem", color: "#999", mt: 0.25, fontStyle: "italic" }}>{loc.notes}</Typography>
+                  )}
+                </Box>
+              ))}
+            </Box>
+            <Button
+              size="small"
+              startIcon={<AddIcon sx={{ fontSize: 12 }} />}
+              onClick={() => openAddLoc(v.id)}
+              sx={{ mt: 0.75, textTransform: "none", fontSize: "0.72rem", color: "#888", p: 0, minWidth: 0, "&:hover": { color: color } }}
+            >
+              Add Location
+            </Button>
+          </Box>
+        )}
+
+        {/* Add location link when no locations exist */}
+        {(!v.locations || v.locations.length === 0) && (
+          <Button
+            size="small"
+            startIcon={<AddIcon sx={{ fontSize: 12 }} />}
+            onClick={() => openAddLoc(v.id)}
+            sx={{ mt: 1, textTransform: "none", fontSize: "0.72rem", color: "#bbb", p: 0, minWidth: 0, "&:hover": { color: color } }}
+          >
+            Add Location
+          </Button>
+        )}
 
         {v.notes && (
           <Typography sx={{ fontSize: "0.75rem", color: "#999", mt: 1, fontStyle: "italic", lineHeight: 1.4 }}>
@@ -402,7 +624,6 @@ export default function VendorsPage() {
 
         return (
           <Box key={cat} sx={{ mb: 3 }}>
-            {/* Section header */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
               <Typography sx={{ fontSize: "1rem" }}>{icon}</Typography>
               <Typography sx={{ fontWeight: 700, fontSize: "0.92rem", color }}>
@@ -414,15 +635,14 @@ export default function VendorsPage() {
               </Typography>
             </Box>
 
-            {/* Cards grid */}
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 1.5 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 1.5 }}>
               {catVendors.map(v => <VendorCard key={v.id} v={v} />)}
             </Box>
           </Box>
         )
       })}
 
-      {/* ── Add/Edit Dialog ─────────────────────────────────────────────────── */}
+      {/* ── Add/Edit Vendor Dialog ─────────────────────────────────────────────── */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle sx={{ fontWeight: 700 }}>
           {editing ? `Edit ${editing.name}` : "Add Vendor"}
@@ -460,6 +680,30 @@ export default function VendorsPage() {
                   <MenuItem key={r.value} value={r.value}>{r.label}</MenuItem>
                 ))}
               </TextField>
+            </Box>
+
+            <Divider><Typography sx={{ fontSize: "0.72rem", color: "#aaa", px: 1 }}>Products / Services</Typography></Divider>
+
+            <TextField
+              label="Products / Services Supplied" fullWidth size="small"
+              placeholder="Field chalk, Field paint, Mound clay chips…"
+              helperText="Comma-separated list of what we use this vendor for"
+              value={form.products} onChange={e => set("products", e.target.value)}
+            />
+
+            <Divider><Typography sx={{ fontSize: "0.72rem", color: "#aaa", px: 1 }}>Account Info</Typography></Divider>
+
+            <Box sx={{ display: "flex", gap: 2 }}>
+              <TextField
+                label="Account Number" size="small" sx={{ flex: 1 }}
+                value={form.account_number} onChange={e => set("account_number", e.target.value)}
+              />
+              <TextField
+                label="Account Name (if different)" size="small" sx={{ flex: 1 }}
+                placeholder="e.g. former league name"
+                helperText="Leave blank if same as vendor name"
+                value={form.account_name} onChange={e => set("account_name", e.target.value)}
+              />
             </Box>
 
             <Divider><Typography sx={{ fontSize: "0.72rem", color: "#aaa", px: 1 }}>Contact Info</Typography></Divider>
@@ -504,7 +748,64 @@ export default function VendorsPage() {
         </DialogActions>
       </Dialog>
 
-      {/* ── Delete Confirm ──────────────────────────────────────────────────── */}
+      {/* ── Add/Edit Location Dialog ────────────────────────────────────────────── */}
+      <Dialog open={locOpen} onClose={() => setLocOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          {locEditing ? "Edit Location" : "Add Location"}
+        </DialogTitle>
+        <DialogContent dividers>
+          {locError && <Alert severity="error" sx={{ mb: 2 }}>{locError}</Alert>}
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 0.5 }}>
+            <TextField
+              label="Label" required fullWidth size="small"
+              placeholder="e.g. Fishers, Indianapolis"
+              value={locForm.label} onChange={e => setLoc("label", e.target.value)}
+            />
+            <TextField
+              label="Address" fullWidth size="small"
+              value={locForm.address} onChange={e => setLoc("address", e.target.value)}
+            />
+            <Box sx={{ display: "flex", gap: 2 }}>
+              <TextField
+                label="Phone" size="small" sx={{ flex: 1 }}
+                value={locForm.phone} onChange={e => setLoc("phone", e.target.value)}
+              />
+              <TextField
+                label="Website" size="small" sx={{ flex: 1 }}
+                placeholder="https://…"
+                value={locForm.website} onChange={e => setLoc("website", e.target.value)}
+              />
+            </Box>
+            <TextField
+              label="Notes" multiline rows={2} fullWidth size="small"
+              placeholder="Delivery only, pickup only, hours, etc."
+              value={locForm.notes} onChange={e => setLoc("notes", e.target.value)}
+            />
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <input
+                type="checkbox"
+                id="is_primary"
+                checked={locForm.is_primary}
+                onChange={e => setLoc("is_primary", e.target.checked)}
+              />
+              <label htmlFor="is_primary" style={{ fontSize: "0.85rem", color: "#555", cursor: "pointer" }}>
+                Primary / preferred location
+              </label>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setLocOpen(false)} sx={{ textTransform: "none", color: "#666" }}>Cancel</Button>
+          <Button
+            variant="contained" onClick={handleLocSave} disabled={locSaving}
+            sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a80f28" }, textTransform: "none", fontWeight: 600 }}
+          >
+            {locSaving ? "Saving…" : locEditing ? "Save Changes" : "Add Location"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Delete Vendor Confirm ────────────────────────────────────────────────── */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>Delete Vendor?</DialogTitle>
         <DialogContent>
@@ -519,6 +820,26 @@ export default function VendorsPage() {
             sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a80f28" }, textTransform: "none", fontWeight: 600 }}
           >
             {deleting ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Delete Location Confirm ──────────────────────────────────────────────── */}
+      <Dialog open={!!deleteLoc} onClose={() => setDeleteLoc(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Remove Location?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Remove the <strong>{deleteLoc?.loc.label}</strong> location from{" "}
+            <strong>{deleteLoc?.vendorName}</strong>? This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setDeleteLoc(null)} sx={{ textTransform: "none", color: "#666" }}>Cancel</Button>
+          <Button
+            variant="contained" onClick={handleLocDelete} disabled={deletingLoc}
+            sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a80f28" }, textTransform: "none", fontWeight: 600 }}
+          >
+            {deletingLoc ? "Removing…" : "Remove"}
           </Button>
         </DialogActions>
       </Dialog>

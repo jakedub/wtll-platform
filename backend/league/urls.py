@@ -92,6 +92,8 @@ from league.views.vendors import (
     VendorDetailView,
     VendorCategoriesView,
     VendorBoardRolesView,
+    VendorLocationListCreateView,
+    VendorLocationDetailView,
 )
 from league.views.sibling_check import SiblingCheckView
 from league.views.auth import (
@@ -115,6 +117,7 @@ from league.views.board_hub import (
     CalendarEventListCreateView, CalendarEventDetailView,
     ChecklistItemListCreateView, ChecklistItemDetailView,
 )
+from league.views.oob_form import OOBFormView
 
 
 
@@ -265,10 +268,12 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     path("geocode/batch/", GeocodeMissingPlayersView.as_view(), name="geocode-batch"),
 
     # Vendors
-    path("vendors/",                  VendorListView.as_view(),       name="vendor-list"),
-    path("vendors/categories/",       VendorCategoriesView.as_view(), name="vendor-categories"),
-    path("vendors/board-roles/",      VendorBoardRolesView.as_view(), name="vendor-board-roles"),
-    path("vendors/<int:pk>/",         VendorDetailView.as_view(),     name="vendor-detail"),
+    path("vendors/",                                          VendorListView.as_view(),               name="vendor-list"),
+    path("vendors/categories/",                               VendorCategoriesView.as_view(),         name="vendor-categories"),
+    path("vendors/board-roles/",                              VendorBoardRolesView.as_view(),         name="vendor-board-roles"),
+    path("vendors/<int:pk>/",                                 VendorDetailView.as_view(),             name="vendor-detail"),
+    path("vendors/<int:vendor_pk>/locations/",                VendorLocationListCreateView.as_view(), name="vendor-location-list"),
+    path("vendors/locations/<int:pk>/",                       VendorLocationDetailView.as_view(),     name="vendor-location-detail"),
 
     # District Leadership
     path("district-leaders/",               DistrictLeaderListView.as_view(),      name="district-leader-list"),
@@ -331,4 +336,7 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     # Board Operations Hub — Checklist
     path("board-hub/checklist/",            ChecklistItemListCreateView.as_view(),  name="board-hub-checklist"),
     path("board-hub/checklist/<int:pk>/",   ChecklistItemDetailView.as_view(),      name="board-hub-checklist-detail"),
+
+    # Generated forms
+    path("forms/oob/",                      OOBFormView.as_view(),                  name="form-oob"),
 ]

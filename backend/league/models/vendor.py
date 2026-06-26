@@ -49,6 +49,22 @@ class Vendor(models.Model):
     board_role    = models.CharField(max_length=100, choices=BOARD_ROLES, blank=True,
                                      help_text="Board role responsible for this vendor relationship.")
 
+    # ── What they supply ──────────────────────────────────────────────────────
+    products = models.TextField(
+        blank=True,
+        help_text="Comma-separated list of products/services this vendor supplies. E.g. 'Field chalk, Field paint, Mound clay'",
+    )
+
+    # ── Account information ───────────────────────────────────────────────────
+    account_number = models.CharField(
+        max_length=100, blank=True,
+        help_text="Our account number with this vendor.",
+    )
+    account_name = models.CharField(
+        max_length=200, blank=True,
+        help_text="Name the account is registered under, if different from the league's current name.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -57,3 +73,22 @@ class Vendor(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_category_display()})"
+
+
+class VendorLocation(models.Model):
+    """A physical store/branch location for a vendor."""
+
+    vendor   = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name="locations")
+    label    = models.CharField(max_length=100, help_text='Short label, e.g. "Fishers (Primary)" or "Indianapolis"')
+    address  = models.CharField(max_length=300, blank=True)
+    phone    = models.CharField(max_length=30, blank=True)
+    website  = models.URLField(blank=True)
+    notes    = models.TextField(blank=True, help_text="Location-specific notes, e.g. delivery area, pickup only")
+    is_primary  = models.BooleanField(default=False, help_text="Primary/preferred location")
+    sort_order  = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-is_primary", "sort_order", "id"]
+
+    def __str__(self):
+        return f"{self.vendor.name} — {self.label}"

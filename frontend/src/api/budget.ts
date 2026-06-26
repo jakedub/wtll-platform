@@ -1,5 +1,19 @@
 import client from "./client"
 
+/** Divisions that apply to Baseball / Softball budget items. */
+export const DIVISIONS = [
+  { value: "TEE_BALL",  label: "Tee Ball",         sport: "baseball", color: "#78909c" },
+  { value: "PEE_WEE",  label: "Pee Wee",           sport: "baseball", color: "#26a69a" },
+  { value: "AAA",       label: "AAA",               sport: "baseball", color: "#1565c0" },
+  { value: "MAJORS",    label: "Majors",            sport: "baseball", color: "#C41230" },
+  { value: "SF_MINORS", label: "Softball Minors",   sport: "softball", color: "#8e24aa" },
+  { value: "SF_MAJORS", label: "Softball Majors",   sport: "softball", color: "#d81b60" },
+  { value: "ALL_DIV",   label: "All Divisions",     sport: "both",     color: "#546e7a" },
+]
+
+/** Categories that support per-division line items. */
+export const DIVISION_CATEGORIES = new Set(["BASEBALL", "SOFTBALL"])
+
 export const CATEGORIES = [
   { value: "BASEBALL",     label: "Baseball",                 color: "#1565c0" },
   { value: "SOFTBALL",     label: "Softball",                 color: "#6a1b9a" },
@@ -27,9 +41,12 @@ export interface BudgetLine {
   sub_group: string
   owner_role: string
   is_revenue: boolean
+  division: string            // e.g. "MAJORS", "AAA", "" for none
   actual: string | null       // Decimal comes as string from DRF
   estimate: string | null
   estimate_override: boolean
+  quantity: number | null
+  unit_cost: string | null    // Decimal from DRF
   effective_estimate: string | null
   notes: string
   sort_order: number

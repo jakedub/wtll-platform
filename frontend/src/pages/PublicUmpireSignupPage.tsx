@@ -3,6 +3,7 @@ import { Box, Typography } from "@mui/material"
 import SportsIcon from "@mui/icons-material/Sports"
 import PublicNav from "../components/PublicNav"
 import UmpireSignupPage from "./UmpireSignupPage"
+import PublicRoleGate from "../components/PublicRoleGate"
 import client from "../api/client"
 
 export default function PublicUmpireSignupPage() {
@@ -17,23 +18,25 @@ export default function PublicUmpireSignupPage() {
   if (enabled === null) return null
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f4f4f5" }}>
-      <PublicNav />
-      <Box sx={{ maxWidth: 900, mx: "auto", px: 2, py: 4 }}>
-        {enabled ? (
-          <UmpireSignupPage isPublic />
-        ) : (
-          <Box sx={{ textAlign: "center", py: 10 }}>
-            <SportsIcon sx={{ fontSize: 56, color: "#d4d4d8", mb: 2 }} />
-            <Typography variant="h5" sx={{ fontWeight: 700, color: "#555", mb: 1 }}>
-              Umpire Sign-Ups Unavailable
-            </Typography>
-            <Typography sx={{ color: "#888" }}>
-              Umpire sign-ups are not currently open. Check back later or contact the league.
-            </Typography>
-          </Box>
-        )}
+    <PublicRoleGate requires={["is_umpire", "is_staff", "is_board_member"]}>
+      <Box sx={{ minHeight: "100vh", bgcolor: "#f4f4f5" }}>
+        <PublicNav />
+        <Box sx={{ maxWidth: 900, mx: "auto", px: 2, py: 4 }}>
+          {enabled ? (
+            <UmpireSignupPage isPublic />
+          ) : (
+            <Box sx={{ textAlign: "center", py: 10 }}>
+              <SportsIcon sx={{ fontSize: 56, color: "#d4d4d8", mb: 2 }} />
+              <Typography variant="h5" sx={{ fontWeight: 700, color: "#555", mb: 1 }}>
+                Umpire Sign-Ups Unavailable
+              </Typography>
+              <Typography sx={{ color: "#888" }}>
+                Umpire sign-ups are not currently open. Check back later or contact the league.
+              </Typography>
+            </Box>
+          )}
+        </Box>
       </Box>
-    </Box>
+    </PublicRoleGate>
   )
 }

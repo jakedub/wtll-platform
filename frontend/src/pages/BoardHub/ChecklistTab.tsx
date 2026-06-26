@@ -1,88 +1,325 @@
-import { Box, Chip, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material"
+import { useEffect, useState, useMemo } from "react"
+import {
+  Box, Chip, Table, TableBody, TableCell, TableHead, TableRow, Typography,
+  IconButton, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, MenuItem, CircularProgress, Tooltip,
+} from "@mui/material"
+import AddIcon   from "@mui/icons-material/Add"
+import EditIcon  from "@mui/icons-material/Edit"
 import { CHIP_SX } from "./shared"
+import {
+  ChecklistItem, ChecklistType, ChecklistGroup,
+  CHECKLIST_TYPE_META, CHECKLIST_GROUP_META,
+  getChecklistItems, createChecklistItem, updateChecklistItem, deleteChecklistItem,
+} from "../../api/boardHub"
 
-interface CheckItem { date: string; item: string; owner: string; type: "hard" | "action" | "allstar" }
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEMS: CheckItem[] = [
-  { date: "1st week of June 2026", item: "Playoffs conducted (all divisions)", owner: "VP Baseball · VP Softball", type: "hard" },
-  { date: "Sat, first full week of June 2026", item: "Championship games — all divisions", owner: "President · VP Baseball · Grounds Manager", type: "hard" },
-  { date: "Before end of school year 2026", item: "All Star paperwork submitted to DA", owner: "Baseball Player Agent · VP Baseball", type: "allstar" },
-  { date: "Early July 2026", item: "Fall Ball registration opens; Early Bird flyer published", owner: "Baseball Player Agent · Marketing", type: "action" },
-  { date: "July 2026", item: "Interleague partners confirmed for Fall Ball", owner: "President · VP Baseball", type: "action" },
-  { date: "2nd week of August 2026", item: "Fall Ball registration closes", owner: "Baseball Player Agent · Secretary", type: "hard" },
-  { date: "2nd week of August 2026", item: "Fall Ball uniforms ordered (hat + raglan)", owner: "VP Baseball · Equipment Manager", type: "hard" },
-  { date: "Last weekend of September 2026", item: "Fall Ball single-day tournament", owner: "VP Baseball · Grounds Manager · Umpire in Chief", type: "action" },
-  { date: "October 1, 2026", item: "Fall Ball season ends", owner: "VP Baseball", type: "hard" },
-  { date: "Early November 2026", item: "2027 budget presented to board", owner: "Treasurer · President", type: "hard" },
-  { date: "Early December 2026", item: "Indoor evaluation venue contracted", owner: "VP Baseball · Grounds Manager", type: "hard" },
-  { date: "December 2026", item: "Uniform vendor selected for 2027 spring (AAA/Majors)", owner: "VP Baseball · Equipment Manager", type: "action" },
-  { date: "December 2026", item: "Registration platform configured for January launch", owner: "Secretary · Player Agents", type: "action" },
-  { date: "2nd week of January 2027", item: "Spring registration opens (second semester)", owner: "Secretary · Baseball Player Agent · Softball Player Agent", type: "hard" },
-  { date: "January 2027", item: "School enrollment form required — communicated at registration", owner: "Baseball Player Agent · Softball Player Agent", type: "action" },
-  { date: "February 2027", item: "Pitcher/catcher clinic promoted and scheduled", owner: "VP Baseball · Marketing", type: "action" },
-  { date: "February 2027", item: "Umpire training / certification sessions scheduled", owner: "Umpire in Chief", type: "action" },
-  { date: "1st Saturday of March 2027", item: "AAA/Majors indoor evaluations", owner: "VP Baseball · Baseball Player Agent", type: "hard" },
-  { date: "Mid-March 2027", item: "Registration closes; eligibility check runs", owner: "Baseball Player Agent · Softball Player Agent", type: "hard" },
-  { date: "Before last Saturday of March 2027", item: "Draft complete", owner: "VP Baseball · Baseball Player Agent", type: "hard" },
-  { date: "Last Saturday of March 2027", item: "Rosters finalized", owner: "VP Baseball · Baseball Player Agent", type: "hard" },
-  { date: "Late March 2027", item: "Spring uniforms ordered (AAA/Majors)", owner: "VP Baseball · Equipment Manager", type: "hard" },
-  { date: "2nd Saturday of April 2027", item: "Opening Day", owner: "President · VP Baseball · VP Softball", type: "hard" },
-  { date: "Memorial Day 2027", item: "No games scheduled", owner: "VP Baseball · VP Softball", type: "hard" },
-  { date: "1st week of May 2027", item: "All Star nominations distributed to coaches", owner: "Baseball Player Agent", type: "allstar" },
-  { date: "2nd week of May 2027", item: "Teen Baseball registration closes", owner: "Baseball Player Agent", type: "hard" },
-  { date: "2nd week of May 2027", item: "All Star teams selected", owner: "Selection Committee · VP Baseball", type: "allstar" },
-  { date: "1st week of June 2027", item: "Playoffs (all divisions)", owner: "VP Baseball · VP Softball · Umpire in Chief", type: "hard" },
-  { date: "Before end of school year 2027", item: "All Star paperwork submitted to DA", owner: "Baseball Player Agent · VP Baseball", type: "allstar" },
-  { date: "Sat, first full week of June 2027", item: "Championship games", owner: "President · VP Baseball · VP Softball", type: "hard" },
-  { date: "Post-championship, June 2027", item: "Teen Baseball practices begin; season ends mid-July", owner: "Baseball Player Agent", type: "action" },
-  { date: "Early July 2027", item: "Fall Ball 2027 registration opens; planning cycle begins", owner: "Baseball Player Agent · VP Baseball", type: "action" },
-]
+const RED = "#C41230"
 
-const TYPE_LABEL: Record<string, { label: string; color: keyof typeof CHIP_SX }> = {
-  hard:    { label: "Hard Deadline", color: "red" },
-  action:  { label: "Action Item",   color: "orange" },
-  allstar: { label: "All Stars",     color: "purple" },
+const ROW_BG: Record<ChecklistType, string> = {
+  hard:        "rgba(196,18,48,0.04)",
+  action:      "rgba(230,81,0,0.04)",
+  allstar:     "rgba(106,27,154,0.05)",
+  showcase:    "rgba(21,101,192,0.05)",
+  fundraising: "rgba(230,162,0,0.05)",
+  tee_ball:    "rgba(46,125,50,0.04)",
+  general:     "transparent",
 }
 
-const ROW_BG: Record<string, string> = {
-  hard:    "rgba(196,18,48,0.04)",
-  action:  "rgba(230,81,0,0.04)",
-  allstar: "rgba(106,27,154,0.05)",
+// ─── Item Edit Dialog ─────────────────────────────────────────────────────────
+
+interface ItemDialogProps {
+  open:      boolean
+  initial?:  Partial<ChecklistItem>
+  onClose:   () => void
+  onSave:    (data: Omit<ChecklistItem, "id">) => Promise<void>
+  onDelete?: () => Promise<void>
 }
+
+const EMPTY = (): Omit<ChecklistItem, "id"> => ({
+  date_window: "", item: "", owner: "", item_type: "action", group: "general", sort_order: 0,
+})
+
+function ItemDialog({ open, initial, onClose, onSave, onDelete }: ItemDialogProps) {
+  const [form, setForm] = useState(EMPTY())
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setForm(initial ? { ...EMPTY(), ...initial } : EMPTY())
+      setConfirmDelete(false)
+    }
+  }, [open, initial])
+
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+
+  const handleSave = async () => {
+    if (!form.item.trim() || !form.date_window.trim()) return
+    setSaving(true)
+    try { await onSave(form) } finally { setSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!onDelete) return
+    setSaving(true)
+    try { await onDelete() } finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 700 }}>{initial?.id ? "Edit Item" : "Add Checklist Item"}</DialogTitle>
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}>
+        <TextField
+          label="Date / Window" size="small" required
+          placeholder="e.g. 2nd week of January 2027"
+          value={form.date_window} onChange={set("date_window")}
+        />
+        <TextField
+          label="Item" size="small" required multiline rows={2}
+          value={form.item} onChange={set("item")}
+        />
+        <TextField
+          label="Owner(s)" size="small"
+          placeholder="e.g. VP Baseball · Equipment Manager"
+          value={form.owner} onChange={set("owner")}
+        />
+        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+          <TextField
+            select label="Type" size="small"
+            value={form.item_type}
+            onChange={e => setForm(f => ({ ...f, item_type: e.target.value as ChecklistType }))}
+          >
+            {(Object.entries(CHECKLIST_TYPE_META) as [ChecklistType, { label: string; color: string }][]).map(([v, m]) => (
+              <MenuItem key={v} value={v}>{m.label}</MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select label="Group" size="small"
+            value={form.group}
+            onChange={e => setForm(f => ({ ...f, group: e.target.value as ChecklistGroup }))}
+          >
+            {(Object.entries(CHECKLIST_GROUP_META) as [ChecklistGroup, { label: string }][]).map(([v, m]) => (
+              <MenuItem key={v} value={v}>{m.label}</MenuItem>
+            ))}
+          </TextField>
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2, justifyContent: "space-between" }}>
+        <Box>
+          {onDelete && !confirmDelete && (
+            <Button color="error" size="small" onClick={() => setConfirmDelete(true)}>Delete</Button>
+          )}
+          {confirmDelete && (
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Typography sx={{ fontSize: "0.8rem", color: "#c62828" }}>Sure?</Typography>
+              <Button color="error" size="small" onClick={handleDelete} disabled={saving}>Yes, delete</Button>
+              <Button size="small" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            </Box>
+          )}
+        </Box>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Button onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving || !form.item.trim() || !form.date_window.trim()}
+            sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a50e28" } }}>
+            {saving ? <CircularProgress size={16} color="inherit" /> : "Save"}
+          </Button>
+        </Box>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const TYPE_KEYS = Object.keys(CHECKLIST_TYPE_META) as ChecklistType[]
+const GROUP_KEYS = Object.keys(CHECKLIST_GROUP_META) as ChecklistGroup[]
 
 export default function ChecklistTab() {
+  const [items,      setItems]      = useState<ChecklistItem[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [typeFilter, setTypeFilter] = useState<ChecklistType | "all">("all")
+  const [groupFilter,setGroupFilter]= useState<ChecklistGroup | "all">("all")
+
+  // Dialog state
+  const [dialogOpen,    setDialogOpen]    = useState(false)
+  const [dialogInitial, setDialogInitial] = useState<Partial<ChecklistItem> | undefined>(undefined)
+  const [editingId,     setEditingId]     = useState<number | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    try { setItems(await getChecklistItems()) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const filtered = useMemo(() =>
+    items.filter(it => {
+      if (typeFilter !== "all" && it.item_type !== typeFilter) return false
+      if (groupFilter !== "all" && it.group !== groupFilter) return false
+      return true
+    }),
+    [items, typeFilter, groupFilter]
+  )
+
+  const openAdd = () => {
+    setEditingId(null)
+    setDialogInitial(undefined)
+    setDialogOpen(true)
+  }
+
+  const openEdit = (it: ChecklistItem) => {
+    setEditingId(it.id)
+    setDialogInitial(it)
+    setDialogOpen(true)
+  }
+
+  const handleSave = async (data: Omit<ChecklistItem, "id">) => {
+    if (editingId !== null) {
+      const updated = await updateChecklistItem(editingId, data)
+      setItems(prev => prev.map(it => it.id === editingId ? updated : it))
+    } else {
+      const created = await createChecklistItem(data)
+      setItems(prev => [...prev, created])
+    }
+    setDialogOpen(false)
+  }
+
+  const handleDelete = async () => {
+    if (editingId === null) return
+    await deleteChecklistItem(editingId)
+    setItems(prev => prev.filter(it => it.id !== editingId))
+    setDialogOpen(false)
+  }
+
   return (
     <Box>
-      <Box sx={{ display: "flex", gap: 1.5, mb: 2.5, flexWrap: "wrap" }}>
-        {Object.entries(TYPE_LABEL).map(([, { label, color }]) => (
-          <Chip key={label} label={label} size="small" sx={{ ...CHIP_SX[color], fontWeight: 700, fontSize: "0.72rem" }} />
-        ))}
-        <Typography sx={{ fontSize: "0.8rem", color: "#888", alignSelf: "center" }}>— Color-coded by type</Typography>
+      {/* Type filter chips */}
+      <Box sx={{ display: "flex", gap: 1, mb: 1.5, flexWrap: "wrap", alignItems: "center" }}>
+        <Typography sx={{ fontSize: "0.75rem", color: "#888", mr: 0.5 }}>Type:</Typography>
+        <Chip
+          label="All" size="small"
+          onClick={() => setTypeFilter("all")}
+          sx={typeFilter === "all"
+            ? { bgcolor: "#333", color: "#fff", fontWeight: 700, fontSize: "0.72rem" }
+            : { bgcolor: "#f4f4f5", color: "#555", fontWeight: 600, fontSize: "0.72rem" }}
+        />
+        {TYPE_KEYS.map(t => {
+          const meta = CHECKLIST_TYPE_META[t]
+          const active = typeFilter === t
+          return (
+            <Chip
+              key={t} label={meta.label} size="small"
+              onClick={() => setTypeFilter(active ? "all" : t)}
+              sx={active
+                ? { ...CHIP_SX[meta.color as keyof typeof CHIP_SX], fontWeight: 700, fontSize: "0.72rem" }
+                : { bgcolor: "#f4f4f5", color: "#555", fontWeight: 600, fontSize: "0.72rem" }}
+            />
+          )
+        })}
       </Box>
-      <Box sx={{ overflowX: "auto" }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              {["Date / Window", "Item", "Owner", "Type"].map((h) => (
-                <TableCell key={h} sx={{ fontWeight: 700, fontSize: "0.75rem", color: "#C41230", bgcolor: "#fafafa", whiteSpace: "nowrap" }}>{h}</TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {ITEMS.map((row, i) => {
-              const { label, color } = TYPE_LABEL[row.type]
-              return (
-                <TableRow key={i} sx={{ bgcolor: ROW_BG[row.type] }}>
-                  <TableCell sx={{ fontSize: "0.8rem", whiteSpace: "nowrap", fontWeight: 600 }}>{row.date}</TableCell>
-                  <TableCell sx={{ fontSize: "0.82rem" }}>{row.item}</TableCell>
-                  <TableCell sx={{ fontSize: "0.78rem", color: "#555" }}>{row.owner}</TableCell>
-                  <TableCell><Chip label={label} size="small" sx={{ ...CHIP_SX[color], fontWeight: 700, fontSize: "0.68rem", height: 20 }} /></TableCell>
+
+      {/* Group filter chips */}
+      <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap", alignItems: "center" }}>
+        <Typography sx={{ fontSize: "0.75rem", color: "#888", mr: 0.5 }}>Group:</Typography>
+        <Chip
+          label="All" size="small"
+          onClick={() => setGroupFilter("all")}
+          sx={groupFilter === "all"
+            ? { bgcolor: "#333", color: "#fff", fontWeight: 700, fontSize: "0.72rem" }
+            : { bgcolor: "#f4f4f5", color: "#555", fontWeight: 600, fontSize: "0.72rem" }}
+        />
+        {GROUP_KEYS.map(g => {
+          const active = groupFilter === g
+          return (
+            <Chip
+              key={g} label={CHECKLIST_GROUP_META[g].label} size="small"
+              onClick={() => setGroupFilter(active ? "all" : g)}
+              sx={active
+                ? { bgcolor: RED, color: "#fff", fontWeight: 700, fontSize: "0.72rem" }
+                : { bgcolor: "#f4f4f5", color: "#555", fontWeight: 600, fontSize: "0.72rem" }}
+            />
+          )
+        })}
+      </Box>
+
+      {/* Add button */}
+      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
+        <Button
+          startIcon={<AddIcon />} size="small" variant="outlined"
+          onClick={openAdd}
+          sx={{ color: RED, borderColor: RED, "&:hover": { borderColor: RED, bgcolor: "rgba(196,18,48,0.06)" }, fontWeight: 700, textTransform: "none", fontSize: "0.8rem" }}
+        >
+          Add Item
+        </Button>
+      </Box>
+
+      {loading && (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+          <CircularProgress sx={{ color: RED }} />
+        </Box>
+      )}
+
+      {!loading && (
+        <Box sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                {["Date / Window", "Item", "Owner", "Group", "Type", ""].map((h) => (
+                  <TableCell key={h} sx={{ fontWeight: 700, fontSize: "0.75rem", color: RED, bgcolor: "#fafafa", whiteSpace: "nowrap" }}>{h}</TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filtered.map(row => {
+                const typeMeta  = CHECKLIST_TYPE_META[row.item_type]
+                const groupMeta = CHECKLIST_GROUP_META[row.group]
+                return (
+                  <TableRow key={row.id} sx={{ bgcolor: ROW_BG[row.item_type], "&:hover": { bgcolor: "rgba(0,0,0,0.03)" } }}>
+                    <TableCell sx={{ fontSize: "0.8rem", whiteSpace: "nowrap", fontWeight: 600 }}>{row.date_window}</TableCell>
+                    <TableCell sx={{ fontSize: "0.82rem" }}>{row.item}</TableCell>
+                    <TableCell sx={{ fontSize: "0.78rem", color: "#555" }}>{row.owner}</TableCell>
+                    <TableCell>
+                      <Chip label={groupMeta.label} size="small"
+                        sx={{ bgcolor: "#f4f4f5", color: "#555", fontWeight: 600, fontSize: "0.68rem", height: 20 }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={typeMeta.label} size="small"
+                        sx={{ ...CHIP_SX[typeMeta.color as keyof typeof CHIP_SX], fontWeight: 700, fontSize: "0.68rem", height: 20 }}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ px: 0.5 }}>
+                      <Tooltip title="Edit">
+                        <IconButton size="small" onClick={() => openEdit(row)} sx={{ p: 0.5 }}>
+                          <EditIcon sx={{ fontSize: 14, color: "#aaa" }} />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+              {filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} sx={{ py: 4, textAlign: "center", color: "#aaa", fontSize: "0.85rem" }}>
+                    No items match the current filters.
+                  </TableCell>
                 </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </Box>
+              )}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      <ItemDialog
+        open={dialogOpen}
+        initial={dialogInitial}
+        onClose={() => setDialogOpen(false)}
+        onSave={handleSave}
+        onDelete={editingId !== null ? handleDelete : undefined}
+      />
     </Box>
   )
 }

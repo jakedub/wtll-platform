@@ -12,6 +12,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import BlockIcon from "@mui/icons-material/Block"
 import PublicNav from "../components/PublicNav"
+import PublicRoleGate from "../components/PublicRoleGate"
 import { getPlayers, getPlayerEnrollments } from "../api/players"
 import { createPitchCount } from "../api/pitchCount"
 import client from "../api/client"
@@ -124,7 +125,7 @@ export default function PublicPitchLogPage() {
   const [playersInDivision, setPlayersInDivision] = useState<Player[]>([])
 
   // Step 3: player
-  const [pitchersOnly, setPitchersOnly] = useState(false)
+  const [pitchersOnly, setPitchersOnly] = useState(true)
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const [enrollments, setEnrollments] = useState<PlayerEnrollment[]>([])
   const [selectedEnrollment, setSelectedEnrollment] = useState<PlayerEnrollment | null>(null)
@@ -238,13 +239,14 @@ export default function PublicPitchLogPage() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f4f4f5" }}>
-      <PublicNav />
+    <PublicRoleGate requires={["is_coach", "is_staff", "is_board_member"]}>
+      <Box sx={{ minHeight: "100vh", bgcolor: "#f4f4f5" }}>
+        <PublicNav />
 
-      <Box sx={{ maxWidth: 520, mx: "auto", px: 2, py: 3 }}>
-        {/* Header */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
-          <Box sx={{ width: 4, height: 28, bgcolor: RED, borderRadius: 1, flexShrink: 0 }} />
+        <Box sx={{ maxWidth: 520, mx: "auto", px: 2, py: 3 }}>
+          {/* Header */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
+            <Box sx={{ width: 4, height: 28, bgcolor: RED, borderRadius: 1, flexShrink: 0 }} />
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 800, color: "#111", lineHeight: 1.1 }}>Log Pitches</Typography>
             <Typography sx={{ fontSize: "0.8rem", color: "#777" }}>AAA &amp; Majors — Baseball</Typography>
@@ -475,8 +477,9 @@ export default function PublicPitchLogPage() {
               </Box>
             ))}
           </Box>
-        </Paper>
+          </Paper>
+        </Box>
       </Box>
-    </Box>
+    </PublicRoleGate>
   )
 }

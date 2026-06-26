@@ -30,6 +30,7 @@ import TuneIcon from "@mui/icons-material/Tune"
 import VolunteerActivismIcon from "@mui/icons-material/VolunteerActivism"
 import client from "../api/client"
 import { useAuth } from "../context/AuthContext"
+import { useAppSettings } from "../context/AppSettingsContext"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -344,18 +345,25 @@ interface SiteSettingsData {
   magic_link_expiry_minutes: number
   default_program_id: number | null
   default_program_name: string | null
+  // Module toggles — control which nav sections are visible
+  module_finance_enabled:     boolean
+  module_baseball_enabled:    boolean
+  module_softball_enabled:    boolean
+  module_schedule_enabled:    boolean
+  module_involvement_enabled: boolean
 }
 
 interface LeagueIdentityData {
-  league_name: string
-  short_name: string
-  tagline: string
-  city: string
-  state: string
-  contact_email: string
-  website_url: string
-  primary_color: string
-  secondary_color: string
+  league_name:      string
+  short_name:       string
+  tagline:          string
+  city:             string
+  state:            string
+  little_league_id: string
+  contact_email:    string
+  website_url:      string
+  primary_color:    string
+  secondary_color:  string
 }
 
 interface ProgramOption {
@@ -387,6 +395,9 @@ function SettingRow({ label, description, children }: {
 // ── Site Settings tab ─────────────────────────────────────────────────────────
 
 function SiteSettingsTab() {
+  const { settings, reload: reloadAppSettings } = useAppSettings()
+  const sec = settings.secondaryColor   // org secondary color — used for all "enabled" states
+
   const [data, setData] = useState<SiteSettingsData | null>(null)
   const [programs, setPrograms] = useState<ProgramOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -412,6 +423,8 @@ function SiteSettingsTab() {
       const res = await client.patch("/settings/site/", { [field]: value })
       setData(res.data)
       setSaved(field)
+      // Reload global app settings so nav + signup badges update immediately
+      if (field.startsWith("module_") || field.endsWith("_enabled")) reloadAppSettings()
       setTimeout(() => setSaved(null), 2000)
     } catch {
       setError("Save failed.")
@@ -425,6 +438,49 @@ function SiteSettingsTab() {
   if (!data) return null
 
   const activePrograms = programs.filter(p => p.is_active && !p.season_closed)
+
+  /** Reusable "enabled" chip — uses the org secondary color */
+  const EnabledChip = ({ on, icon }: { on: boolean; icon?: React.ReactNode }) => (
+    <Chip
+      label={on ? "Live" : "Disabled"}
+      size="small"
+      icon={icon ? <>{icon}</> : undefined}
+      sx={{
+        height: 20, fontSize: "0.65rem", fontWeight: 700,
+        bgcolor: on ? `${sec}18` : "#f5f5f5",
+        color: on ? sec : "#aaa",
+        "& .MuiChip-icon": { color: on ? sec : "#ccc" },
+      }}
+    />
+  )
+
+  /** Reusable "on/off" chip for module toggles */
+  const ModuleChip = ({ on }: { on: boolean }) => (
+    <Chip
+      label={on ? "On" : "Off"}
+      size="small"
+      sx={{
+        height: 20, fontSize: "0.65rem", fontWeight: 700,
+        bgcolor: on ? `${sec}18` : "#f5f5f5",
+        color: on ? sec : "#aaa",
+      }}
+    />
+  )
+
+  /** Styled switch that uses org secondary color when on */
+  const OrgSwitch = ({ checked, field, onChange }: {
+    checked: boolean; field: string; onChange: (v: boolean) => void
+  }) => (
+    <Switch
+      checked={checked}
+      disabled={saving === field}
+      onChange={e => onChange(e.target.checked)}
+      sx={{
+        "& .MuiSwitch-switchBase.Mui-checked": { color: sec },
+        "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": { bgcolor: sec },
+      }}
+    />
+  )
 
   return (
     <Box sx={{ maxWidth: 680 }}>
@@ -447,24 +503,13 @@ function SiteSettingsTab() {
           description="Opens the public umpire sign-up page for game assignments."
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            {saved === "umpire_signups_enabled" && <CheckIcon sx={{ fontSize: 16, color: "#2e7d32" }} />}
-            <Switch
+            {saved === "umpire_signups_enabled" && <CheckIcon sx={{ fontSize: 16, color: sec }} />}
+            <OrgSwitch
               checked={data.umpire_signups_enabled}
-              disabled={saving === "umpire_signups_enabled"}
-              onChange={e => patch("umpire_signups_enabled", e.target.checked)}
-              sx={{ "& .MuiSwitch-thumb": { bgcolor: data.umpire_signups_enabled ? "#2e7d32" : undefined } }}
+              field="umpire_signups_enabled"
+              onChange={v => patch("umpire_signups_enabled", v)}
             />
-            <Chip
-              label={data.umpire_signups_enabled ? "Live" : "Disabled"}
-              size="small"
-              icon={<SportsIcon sx={{ fontSize: "12px !important" }} />}
-              sx={{
-                height: 20, fontSize: "0.65rem", fontWeight: 700,
-                bgcolor: data.umpire_signups_enabled ? "#e8f5e9" : "#f5f5f5",
-                color: data.umpire_signups_enabled ? "#2e7d32" : "#aaa",
-                "& .MuiChip-icon": { color: data.umpire_signups_enabled ? "#2e7d32" : "#ccc" },
-              }}
-            />
+            <EnabledChip on={data.umpire_signups_enabled} icon={<SportsIcon sx={{ fontSize: "12px !important" }} />} />
           </Box>
         </SettingRow>
 
@@ -475,23 +520,13 @@ function SiteSettingsTab() {
           description="Opens the public volunteer sign-up page for grounds crew and concessions."
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            {saved === "volunteer_signups_enabled" && <CheckIcon sx={{ fontSize: 16, color: "#2e7d32" }} />}
-            <Switch
+            {saved === "volunteer_signups_enabled" && <CheckIcon sx={{ fontSize: 16, color: sec }} />}
+            <OrgSwitch
               checked={data.volunteer_signups_enabled}
-              disabled={saving === "volunteer_signups_enabled"}
-              onChange={e => patch("volunteer_signups_enabled", e.target.checked)}
+              field="volunteer_signups_enabled"
+              onChange={v => patch("volunteer_signups_enabled", v)}
             />
-            <Chip
-              label={data.volunteer_signups_enabled ? "Live" : "Disabled"}
-              size="small"
-              icon={<VolunteerActivismIcon sx={{ fontSize: "12px !important" }} />}
-              sx={{
-                height: 20, fontSize: "0.65rem", fontWeight: 700,
-                bgcolor: data.volunteer_signups_enabled ? "#e8f5e9" : "#f5f5f5",
-                color: data.volunteer_signups_enabled ? "#2e7d32" : "#aaa",
-                "& .MuiChip-icon": { color: data.volunteer_signups_enabled ? "#2e7d32" : "#ccc" },
-              }}
-            />
+            <EnabledChip on={data.volunteer_signups_enabled} icon={<VolunteerActivismIcon sx={{ fontSize: "12px !important" }} />} />
           </Box>
         </SettingRow>
 
@@ -502,23 +537,13 @@ function SiteSettingsTab() {
           description="Opens the public player evaluation registration pages for all evaluation events."
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            {saved === "evaluation_signups_enabled" && <CheckIcon sx={{ fontSize: 16, color: "#2e7d32" }} />}
-            <Switch
+            {saved === "evaluation_signups_enabled" && <CheckIcon sx={{ fontSize: 16, color: sec }} />}
+            <OrgSwitch
               checked={data.evaluation_signups_enabled}
-              disabled={saving === "evaluation_signups_enabled"}
-              onChange={e => patch("evaluation_signups_enabled", e.target.checked)}
+              field="evaluation_signups_enabled"
+              onChange={v => patch("evaluation_signups_enabled", v)}
             />
-            <Chip
-              label={data.evaluation_signups_enabled ? "Live" : "Disabled"}
-              size="small"
-              icon={<AssessmentIcon sx={{ fontSize: "12px !important" }} />}
-              sx={{
-                height: 20, fontSize: "0.65rem", fontWeight: 700,
-                bgcolor: data.evaluation_signups_enabled ? "#e8f5e9" : "#f5f5f5",
-                color: data.evaluation_signups_enabled ? "#2e7d32" : "#aaa",
-                "& .MuiChip-icon": { color: data.evaluation_signups_enabled ? "#2e7d32" : "#ccc" },
-              }}
-            />
+            <EnabledChip on={data.evaluation_signups_enabled} icon={<AssessmentIcon sx={{ fontSize: "12px !important" }} />} />
           </Box>
         </SettingRow>
       </Paper>
@@ -537,7 +562,7 @@ function SiteSettingsTab() {
           description="How long a sign-in link stays valid after it's sent. Increase for umpires who may not check email immediately."
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            {saved === "magic_link_expiry_minutes" && <CheckIcon sx={{ fontSize: 16, color: "#2e7d32" }} />}
+            {saved === "magic_link_expiry_minutes" && <CheckIcon sx={{ fontSize: 16, color: sec }} />}
             <Select
               size="small"
               value={data.magic_link_expiry_minutes}
@@ -563,13 +588,13 @@ function SiteSettingsTab() {
         </Typography>
       </Box>
 
-      <Paper variant="outlined" sx={{ borderRadius: 2, px: 2 }}>
+      <Paper variant="outlined" sx={{ borderRadius: 2, px: 2, mb: 3 }}>
         <SettingRow
           label="Default Program Year"
           description="The active program pages like pitch log default to when no specific year is selected."
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            {saved === "default_program_id" && <CheckIcon sx={{ fontSize: 16, color: "#2e7d32" }} />}
+            {saved === "default_program_id" && <CheckIcon sx={{ fontSize: 16, color: sec }} />}
             <Select
               size="small"
               value={data.default_program_id ?? ""}
@@ -588,6 +613,44 @@ function SiteSettingsTab() {
           </Box>
         </SettingRow>
       </Paper>
+
+      {/* Module Configuration */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+        <TuneIcon sx={{ fontSize: 16, color: "#888" }} />
+        <Typography sx={{ fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.07em", color: "#888" }}>
+          Module Configuration
+        </Typography>
+      </Box>
+      <Typography sx={{ fontSize: "0.78rem", color: "#aaa", mb: 1.5 }}>
+        Control which sections appear in the navigation. The Board section is always visible.
+        Disable modules you haven't set up yet when onboarding a new league.
+      </Typography>
+
+      <Paper variant="outlined" sx={{ borderRadius: 2, px: 2 }}>
+        {([
+          { field: "module_preseason_enabled",   label: "Pre-Season",   description: "Player import, eligibility, evaluations, and draft." },
+          { field: "module_finance_enabled",     label: "Finance",      description: "Budget and Fundraising." },
+          { field: "module_baseball_enabled",    label: "Baseball Ops", description: "Pitch count, pitch log, teams, and baseball All Stars." },
+          { field: "module_softball_enabled",    label: "Softball Ops", description: "Inning log, softball teams, and softball All Stars." },
+          { field: "module_schedule_enabled",    label: "Schedule",     description: "Calendars, schedule generator, and ICS feed management." },
+          { field: "module_involvement_enabled", label: "Involvement",  description: "Umpire, volunteer, and evaluation sign-up management." },
+        ] as { field: keyof SiteSettingsData; label: string; description: string }[]).map((m, i, arr) => (
+          <Box key={m.field}>
+            <SettingRow label={m.label} description={m.description}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                {saved === m.field && <CheckIcon sx={{ fontSize: 16, color: sec }} />}
+                <OrgSwitch
+                  checked={Boolean(data[m.field])}
+                  field={m.field}
+                  onChange={v => patch(m.field, v)}
+                />
+                <ModuleChip on={Boolean(data[m.field])} />
+              </Box>
+            </SettingRow>
+            {i < arr.length - 1 && <Divider />}
+          </Box>
+        ))}
+      </Paper>
     </Box>
   )
 }
@@ -595,6 +658,7 @@ function SiteSettingsTab() {
 // ── League Identity tab ───────────────────────────────────────────────────────
 
 function LeagueIdentityTab() {
+  const { reload: reloadAppSettings } = useAppSettings()
   const [data, setData] = useState<LeagueIdentityData | null>(null)
   const [draft, setDraft] = useState<LeagueIdentityData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -615,6 +679,8 @@ function LeagueIdentityTab() {
     try {
       const res = await client.patch("/settings/league-identity/", draft)
       setData(res.data); setDraft(res.data); setSaved(true)
+      // Re-fetch public settings so the dynamic theme updates immediately
+      reloadAppSettings()
       setTimeout(() => setSaved(false), 3000)
     } catch {
       setError("Save failed. Please try again.")
@@ -652,10 +718,13 @@ function LeagueIdentityTab() {
           <TextField label="Full League Name" size="small" fullWidth
             value={draft.league_name} onChange={set("league_name")}
             helperText='e.g. "Washington Township Little League"' />
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 2 }}>
             <TextField label="Short Name / Abbreviation" size="small"
               value={draft.short_name} onChange={set("short_name")}
               helperText='e.g. "WTLL"' />
+            <TextField label="Little League ID #" size="small"
+              value={draft.little_league_id ?? ""} onChange={set("little_league_id")}
+              helperText="Used on OOB waiver forms" />
             <TextField label="Tagline" size="small"
               value={draft.tagline} onChange={set("tagline")}
               placeholder="Optional short tagline" />

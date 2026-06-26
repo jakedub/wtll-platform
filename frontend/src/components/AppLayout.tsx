@@ -22,15 +22,17 @@ import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 
 import LogoutIcon from '@mui/icons-material/Logout'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
+import SettingsIcon from '@mui/icons-material/Settings'
 import { NAV_SECTIONS, isFullSizeEligible } from '../config/navConfig'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const RAIL_BG    = '#1c1c1e'
 const DRAWER_BG  = '#111'
 const RAIL_TEXT  = 'rgba(255,255,255,0.55)'
 const ITEM_TEXT  = 'rgba(255,255,255,0.82)'
-const ACTIVE_BG  = '#C41230'
 const HOVER_BG   = 'rgba(255,255,255,0.07)'
 const RAIL_W     = 72
 const DRAWER_W   = 236
@@ -41,6 +43,7 @@ export default function AppLayout({ children }: Props) {
   const theme    = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const { user, logout } = useAuth()
+  const { settings } = useAppSettings()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -53,12 +56,28 @@ export default function AppLayout({ children }: Props) {
   // Mobile drawer
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  const section = NAV_SECTIONS.find(s => s.id === activeSection) ?? null
+  // Filter nav sections by which modules are enabled for this deployment.
+  // Board and Pre-Season are always shown (they're the base of the app).
+  const MODULE_MAP: Record<string, keyof typeof settings.modules> = {
+    preseason:   'preseason',
+    finance:     'finance',
+    baseball:    'baseball',
+    softball:    'softball',
+    schedule:    'schedule',
+    involvement: 'involvement',
+  }
+  const visibleSections = NAV_SECTIONS.filter(s => {
+    const moduleKey = MODULE_MAP[s.id]
+    if (!moduleKey) return true  // board — always visible
+    return settings.modules[moduleKey]
+  })
+
+  const section = visibleSections.find(s => s.id === activeSection) ?? null
   const eligible = isFullSizeEligible(location.pathname)
 
   // Auto-open the section whose item is currently active
   useEffect(() => {
-    const match = NAV_SECTIONS.find(s =>
+    const match = visibleSections.find(s =>
       s.items.some(i => isItemActive(i.path, location.pathname, location.search))
     )
     if (match && match.id !== activeSection) {
@@ -88,7 +107,7 @@ export default function AppLayout({ children }: Props) {
     if (!pathMatch) return false
     // Don't highlight bare /players if ?sport=softball is active
     if (search) {
-      const hasQueryVariant = NAV_SECTIONS.flatMap(s => s.items).some(item => {
+      const hasQueryVariant = visibleSections.flatMap(s => s.items).some(item => {
         const [ip, iq] = item.path.split('?')
         return iq && ip === p && search.includes(iq)
       })
@@ -137,9 +156,9 @@ export default function AppLayout({ children }: Props) {
           }}
           sx={{
             color: location.pathname === '/' ? '#fff' : RAIL_TEXT,
-            bgcolor: location.pathname === '/' ? ACTIVE_BG : 'transparent',
+            bgcolor: location.pathname === '/' ? settings.secondaryColor : 'transparent',
             width: 44, height: 44, borderRadius: 2, mb: 0.5,
-            '&:hover': { bgcolor: location.pathname === '/' ? '#a80f28' : HOVER_BG },
+            '&:hover': { bgcolor: location.pathname === '/' ? `${settings.secondaryColor}dd` : HOVER_BG },
           }}
         >
           <HomeIcon fontSize="small" />
@@ -149,7 +168,7 @@ export default function AppLayout({ children }: Props) {
       <Divider sx={{ width: 32, bgcolor: 'rgba(255,255,255,0.1)', my: 0.5 }} />
 
       {/* Section icons */}
-      {NAV_SECTIONS.map(s => {
+      {visibleSections.map(s => {
         const isActive = activeSection === s.id
         const hasActivePath = s.items.some(i => isItemActive(i.path, location.pathname, location.search))
         return (
@@ -170,8 +189,44 @@ export default function AppLayout({ children }: Props) {
         )
       })}
 
-      {/* Spacer — pushes logout to bottom of rail */}
+      {/* Spacer — pushes guide + logout to bottom of rail */}
       <Box sx={{ flex: 1 }} />
+
+      {/* Guide */}
+      <Tooltip title="Platform Guide" placement="right">
+        <IconButton
+          component={Link}
+          to="/guide"
+          onClick={() => { setMobileOpen(false) }}
+          sx={{
+            color: location.pathname === '/guide' ? '#fff' : RAIL_TEXT,
+            bgcolor: location.pathname === '/guide' ? settings.secondaryColor : 'transparent',
+            width: 44, height: 44, borderRadius: 2, mb: 0.5,
+            '&:hover': { bgcolor: location.pathname === '/guide' ? `${settings.secondaryColor}dd` : HOVER_BG, color: '#fff' },
+          }}
+        >
+          <MenuBookIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+
+      {/* Settings — admin only */}
+      {user?.is_staff && (
+        <Tooltip title="Settings" placement="right">
+          <IconButton
+            component={Link}
+            to="/settings"
+            onClick={() => { setMobileOpen(false) }}
+            sx={{
+              color: location.pathname === '/settings' ? '#fff' : RAIL_TEXT,
+              bgcolor: location.pathname === '/settings' ? settings.secondaryColor : 'transparent',
+              width: 44, height: 44, borderRadius: 2, mb: 0.5,
+              '&:hover': { bgcolor: location.pathname === '/settings' ? `${settings.secondaryColor}dd` : HOVER_BG, color: '#fff' },
+            }}
+          >
+            <SettingsIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
 
       {/* Logout */}
       <Tooltip title={user ? `Sign out (${user.email})` : 'Sign out'} placement="right">

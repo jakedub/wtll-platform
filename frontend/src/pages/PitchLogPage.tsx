@@ -65,7 +65,7 @@ export default function PitchLogPage() {
   const [allEligiblePlayers, setAllEligiblePlayers] = useState<Player[]>([])
   const [players, setPlayers] = useState<Player[]>([])
   const [loadingPlayers, setLoadingPlayers] = useState(true)
-  const [pitchersOnly, setPitchersOnly] = useState(false)
+  const [pitchersOnly, setPitchersOnly] = useState(true)
 
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
 

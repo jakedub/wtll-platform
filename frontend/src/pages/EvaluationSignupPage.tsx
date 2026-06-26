@@ -5,6 +5,8 @@ import {
   MenuItem, Paper, Select, Switch, Table, TableBody, TableCell,
   TableHead, TableRow, TextField, Tooltip, Typography, FormControlLabel,
 } from "@mui/material"
+import PublicLinkBar from "../components/PublicLinkBar"
+import { useAppSettings } from "../context/AppSettingsContext"
 import AddIcon from "@mui/icons-material/Add"
 import EditIcon from "@mui/icons-material/Edit"
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
@@ -158,6 +160,7 @@ function AddSignupDialog({ open, divisions, year, onSave, onClose }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function EvaluationSignupPage() {
+  const { settings } = useAppSettings()
   const [windows, setWindows] = useState<EvalWindow[]>([])
   const [signups, setSignups] = useState<EvalSignup[]>([])
   const [divisions, setDivisions] = useState<Division[]>([])
@@ -209,6 +212,13 @@ export default function EvaluationSignupPage() {
 
   return (
     <Box>
+      {/* Public link bar */}
+      <PublicLinkBar
+        publicPath="/public/evaluations"
+        live={settings.signups.evaluation}
+        secondaryColor={settings.secondaryColor}
+      />
+
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>
           <Box sx={{ width: 4, height: 28, bgcolor: RED, borderRadius: 1, flexShrink: 0 }} />

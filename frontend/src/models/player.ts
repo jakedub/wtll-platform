@@ -23,6 +23,7 @@ export interface Player {
 
   // Computed / joined fields returned by the API
   division_name: string | null
+  division_id: number | null
   team_name: string | null
   team: number | null
 

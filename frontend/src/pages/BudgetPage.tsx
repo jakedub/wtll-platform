@@ -22,7 +22,7 @@ import {
   getBudgetLines, getBudgetSummary, createBudgetLine, updateBudgetLine,
   deleteBudgetLine, approveBudget, revokeApproval, getBudgetExportURL,
   getBudgetYears, copyBudgetYear,
-  CATEGORIES, type BudgetLine, type BudgetSummary,
+  CATEGORIES, DIVISIONS, DIVISION_CATEGORIES, type BudgetLine, type BudgetSummary,
 } from "../api/budget"
 
 const RED = "#C41230"
@@ -60,13 +60,29 @@ const EMPTY = (): Partial<BudgetLine> => ({
   category: "ADMIN",
   item: "",
   sub_group: "",
+  division: "",
   owner_role: "",
   is_revenue: false,
   actual: null,
   estimate: null,
   estimate_override: false,
+  quantity: null,
+  unit_cost: null,
   notes: "",
 })
+
+/** Strip sub-group prefix from item name for cleaner display within a group. */
+function stripPrefix(itemName: string, subGroup: string): string {
+  if (!subGroup) return itemName
+  const lower = itemName.toLowerCase()
+  const prefix = subGroup.toLowerCase()
+  if (lower.startsWith(prefix)) {
+    // Remove the prefix and any trailing separator (space, dash, em-dash, colon)
+    const rest = itemName.slice(subGroup.length).replace(/^\s*[-–—:]\s*/, "").trim()
+    return rest || itemName
+  }
+  return itemName
+}
 
 function LineDialog({
   open, initial, year, onSave, onClose, saving,
@@ -98,16 +114,66 @@ function LineDialog({
           <TextField label="Sub-group (optional)" size="small" fullWidth
             placeholder="e.g. Regular Season, Winter Workout, All Stars"
             value={form.sub_group ?? ""} onChange={e => set("sub_group", e.target.value)} />
+          {/* Division — only shown for Baseball / Softball */}
+          {DIVISION_CATEGORIES.has(form.category ?? "") && (
+            <FormControl size="small" fullWidth>
+              <InputLabel>Division (optional)</InputLabel>
+              <Select
+                value={form.division ?? ""}
+                label="Division (optional)"
+                onChange={e => set("division", e.target.value)}
+              >
+                <MenuItem value=""><em>None — applies to all divisions</em></MenuItem>
+                {DIVISIONS
+                  .filter(d => {
+                    if (form.category === "BASEBALL") return d.sport === "baseball" || d.sport === "both"
+                    if (form.category === "SOFTBALL") return d.sport === "softball" || d.sport === "both"
+                    return false
+                  })
+                  .map(d => (
+                    <MenuItem key={d.value} value={d.value}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: d.color, flexShrink: 0 }} />
+                        {d.label}
+                      </Box>
+                    </MenuItem>
+                  ))
+                }
+              </Select>
+            </FormControl>
+          )}
           <TextField label="Owner / Role" size="small" fullWidth
             value={form.owner_role ?? ""} onChange={e => set("owner_role", e.target.value)} />
+          {/* Quantity-based pricing */}
+          <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+            <TextField label="Qty" type="number" size="small" sx={{ flex: 1 }}
+              placeholder="e.g. 44"
+              helperText="# of units"
+              value={form.quantity ?? ""} onChange={e => set("quantity", e.target.value ? parseInt(e.target.value) : null)}
+              inputProps={{ min: 1, step: 1 }} />
+            <TextField label="Unit Cost ($)" type="number" size="small" sx={{ flex: 1 }}
+              placeholder="e.g. 10.00"
+              helperText="Cost per unit"
+              value={form.unit_cost ?? ""} onChange={e => set("unit_cost", e.target.value || null)}
+              inputProps={{ min: 0, step: "0.01" }} />
+            {form.quantity && form.unit_cost && (
+              <Box sx={{ pt: 0.75, flex: 1, minWidth: 100 }}>
+                <Typography sx={{ fontSize: "0.68rem", color: "#888" }}>Auto-total</Typography>
+                <Typography sx={{ fontSize: "0.92rem", fontWeight: 700, color: "#2e7d32" }}>
+                  ${(Number(form.quantity) * Number(form.unit_cost)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Typography>
+              </Box>
+            )}
+          </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
             <TextField label="Prior Year Actual ($)" type="number" size="small" sx={{ flex: 1 }}
               value={form.actual ?? ""} onChange={e => set("actual", e.target.value || null)}
               inputProps={{ min: 0, step: "0.01" }} />
             <TextField label="Override Estimate ($)" type="number" size="small" sx={{ flex: 1 }}
-              helperText="Leave blank to auto-calc actual × 1.05"
+              helperText={form.quantity && form.unit_cost ? "Qty × unit cost used instead" : "Leave blank to auto-calc actual × 1.05"}
               value={form.estimate ?? ""} onChange={e => set("estimate", e.target.value || null)}
-              inputProps={{ min: 0, step: "0.01" }} />
+              inputProps={{ min: 0, step: "0.01" }}
+              disabled={!!(form.quantity && form.unit_cost)} />
           </Box>
           <FormControlLabel
             control={<Switch checked={!!form.is_revenue} onChange={e => set("is_revenue", e.target.checked)} size="small" />}
@@ -166,6 +232,16 @@ export default function BudgetPage() {
   const [summary, setSummary] = useState<BudgetSummary | null>(null)
   const [allYears, setAllYears] = useState<number[]>([])
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
+  // Sub-group expanded state: key = `${catValue}::${subGroupName}`, default collapsed
+  const [expandedSubGroups, setExpandedSubGroups] = useState<Set<string>>(new Set())
+  const toggleSubGroup = (catValue: string, groupName: string) => {
+    const key = `${catValue}::${groupName}`
+    setExpandedSubGroups(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
   const [newYearOpen, setNewYearOpen] = useState(false)
   const [newYearTarget, setNewYearTarget] = useState<number>(new Date().getFullYear() + 1)
   const [newYearMultiplier, setNewYearMultiplier] = useState<number>(1.05)
@@ -183,6 +259,7 @@ export default function BudgetPage() {
   const [search, setSearch]         = useState("")
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all")
   const [catFilter, setCatFilter]   = useState<string>("")   // "" = all categories
+  const [divFilter, setDivFilter]   = useState<string>("")   // "" = all divisions
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
@@ -240,12 +317,13 @@ export default function BudgetPage() {
 
   // ── Apply filters ────────────────────────────────────────────────────────────
   const q = search.trim().toLowerCase()
-  const isFiltering = !!q || typeFilter !== "all" || !!catFilter
+  const isFiltering = !!q || typeFilter !== "all" || !!catFilter || !!divFilter
 
   const filteredLines = lines.filter(ln => {
     if (typeFilter === "income"  && !ln.is_revenue) return false
     if (typeFilter === "expense" &&  ln.is_revenue) return false
     if (catFilter && ln.category !== catFilter) return false
+    if (divFilter && ln.division !== divFilter) return false
     if (q) {
       const hay = [ln.item, ln.notes, ln.owner_role, ln.sub_group]
         .map(s => (s ?? "").toLowerCase()).join(" ")
@@ -375,11 +453,32 @@ export default function BudgetPage() {
           <Select
             value={catFilter}
             label="Category"
-            onChange={e => setCatFilter(e.target.value)}
+            onChange={e => { setCatFilter(e.target.value); setDivFilter("") }}
             startAdornment={<InputAdornment position="start"><FilterListIcon sx={{ fontSize: 16, color: "#aaa", ml: 0.5 }} /></InputAdornment>}
           >
             <MenuItem value="">All categories</MenuItem>
             {CATEGORIES.map(c => <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>)}
+          </Select>
+        </FormControl>
+
+        {/* Division filter — always visible; only Baseball/Softball items will match */}
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel>Division</InputLabel>
+          <Select
+            value={divFilter}
+            label="Division"
+            onChange={e => setDivFilter(e.target.value)}
+            startAdornment={<InputAdornment position="start"><FilterListIcon sx={{ fontSize: 16, color: "#aaa", ml: 0.5 }} /></InputAdornment>}
+          >
+            <MenuItem value="">All divisions</MenuItem>
+            {DIVISIONS.map(d => (
+              <MenuItem key={d.value} value={d.value}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: d.color, flexShrink: 0 }} />
+                  {d.label}
+                </Box>
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
 
@@ -391,7 +490,7 @@ export default function BudgetPage() {
             <Chip
               label="Clear filters"
               size="small"
-              onDelete={() => { setSearch(""); setTypeFilter("all"); setCatFilter("") }}
+              onDelete={() => { setSearch(""); setTypeFilter("all"); setCatFilter(""); setDivFilter("") }}
               sx={{ height: 22, fontSize: "0.72rem", bgcolor: "#f0f0f0" }}
             />
           </Box>
@@ -480,7 +579,7 @@ export default function BudgetPage() {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        {["Item", "Type", "Owner", "Prior Year Actual", "Budget", ""].map(h => (
+                        {["Item", ...(DIVISION_CATEGORIES.has(cat.value) ? ["Division"] : []), "Qty", "Unit Cost", "Type", "Owner", "Prior Actual", "Budget", ""].map(h => (
                           <TableCell key={h} sx={{ fontWeight: 700, fontSize: "0.72rem", color: "#888", bgcolor: "#fafafa", whiteSpace: "nowrap", py: 0.5 }}>{h}</TableCell>
                         ))}
                       </TableRow>
@@ -496,19 +595,42 @@ export default function BudgetPage() {
                         }
                         const rows: React.ReactNode[] = []
                         Object.entries(groups).forEach(([groupName, groupLines]) => {
-                          const grpActual = groupLines.reduce((s, l) => s + (parseFloat(l.actual ?? "0") || 0), 0)
-                          const grpEst    = groupLines.reduce((s, l) => s + (parseFloat(l.effective_estimate ?? "0") || 0), 0)
-                          // Sub-group header row
+                          const grpEst = groupLines.reduce((s, l) => s + (parseFloat(l.effective_estimate ?? "0") || 0), 0)
+                          const subKey = `${cat.value}::${groupName}`
+                          const subExpanded = groupName
+                            ? (isFiltering || expandedSubGroups.has(subKey))
+                            : true   // ungrouped items always shown
+
+                          // Sub-group header row (collapsible)
                           if (groupName) {
                             rows.push(
-                              <TableRow key={`sg-${groupName}`} sx={{ bgcolor: `${cat.color}08` }}>
-                                <TableCell colSpan={4} sx={{
+                              <TableRow
+                                key={`sg-${groupName}`}
+                                onClick={() => toggleSubGroup(cat.value, groupName)}
+                                sx={{
+                                  bgcolor: `${cat.color}08`, cursor: "pointer",
+                                  "&:hover": { bgcolor: `${cat.color}15` },
+                                }}
+                              >
+                                <TableCell colSpan={6} sx={{
                                   fontSize: "0.72rem", fontWeight: 700,
                                   color: cat.color, pl: 2, py: 0.6,
                                   borderBottom: `1px solid ${cat.color}30`,
                                   textTransform: "uppercase", letterSpacing: "0.07em",
+                                  userSelect: "none",
                                 }}>
-                                  {groupName}
+                                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                    {subExpanded
+                                      ? <ExpandLessIcon sx={{ fontSize: 14, color: cat.color }} />
+                                      : <ExpandMoreIcon sx={{ fontSize: 14, color: cat.color }} />
+                                    }
+                                    {groupName}
+                                    <Chip
+                                      label={groupLines.length}
+                                      size="small"
+                                      sx={{ height: 16, fontSize: "0.6rem", ml: 0.5, bgcolor: `${cat.color}20`, color: cat.color }}
+                                    />
+                                  </Box>
                                 </TableCell>
                                 <TableCell sx={{ fontSize: "0.72rem", textAlign: "right", color: cat.color, fontWeight: 700, py: 0.6, borderBottom: `1px solid ${cat.color}30` }}>
                                   {fmt(grpEst)}
@@ -517,52 +639,93 @@ export default function BudgetPage() {
                               </TableRow>
                             )
                           }
-                          // Line item rows
-                          groupLines.forEach(ln => {
-                            rows.push(
-                              <TableRow key={ln.id} hover sx={{ bgcolor: ln.is_revenue ? "rgba(46,125,50,0.02)" : "transparent" }}>
-                                <TableCell sx={{ fontSize: "0.82rem", pl: groupName ? 3 : 2 }}>
-                                  {ln.item}
-                                  {ln.notes && <Typography sx={{ fontSize: "0.7rem", color: "#aaa" }}>{ln.notes}</Typography>}
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    label={ln.is_revenue ? "Income" : "Expense"}
-                                    size="small"
-                                    sx={{
-                                      height: 18, fontSize: "0.65rem", fontWeight: 700,
-                                      bgcolor: ln.is_revenue ? "rgba(46,125,50,0.1)" : "rgba(196,18,48,0.08)",
-                                      color: ln.is_revenue ? "#2e7d32" : RED,
-                                    }}
-                                  />
-                                </TableCell>
-                                <TableCell sx={{ fontSize: "0.78rem", color: "#777" }}>{ln.owner_role || "—"}</TableCell>
-                                <TableCell sx={{ fontSize: "0.82rem", textAlign: "right", color: "#555" }}>
-                                  {fmt(parseFloat(ln.actual ?? "0") || null)}
-                                </TableCell>
-                                <TableCell sx={{ fontSize: "0.82rem", textAlign: "right", fontWeight: 600 }}>
-                                  {fmt(parseFloat(ln.effective_estimate ?? "0") || null)}
-                                  {ln.estimate_override && (
-                                    <Chip label="set" size="small" sx={{ ml: 0.5, height: 14, fontSize: "0.6rem", bgcolor: "#fff3e0", color: "#e65100" }} />
-                                  )}
-                                </TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                  <Tooltip title="Edit">
-                                    <Button size="small" sx={{ minWidth: 0, p: 0.5, color: "#888" }}
-                                      onClick={() => { setEditLine(ln); setDialogOpen(true) }}>
-                                      <EditIcon sx={{ fontSize: 15 }} />
-                                    </Button>
-                                  </Tooltip>
-                                  <Tooltip title="Delete">
-                                    <Button size="small" sx={{ minWidth: 0, p: 0.5, color: "#ccc", "&:hover": { color: RED } }}
-                                      onClick={() => handleDelete(ln.id)}>
-                                      <DeleteOutlineIcon sx={{ fontSize: 15 }} />
-                                    </Button>
-                                  </Tooltip>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })
+
+                          // Line item rows (collapsed when sub-group is collapsed)
+                          if (subExpanded) {
+                            groupLines.forEach(ln => {
+                              // Strip repeated sub-group prefix from item name
+                              const displayName = stripPrefix(ln.item, groupName)
+                              rows.push(
+                                <TableRow key={ln.id} hover sx={{ bgcolor: ln.is_revenue ? "rgba(46,125,50,0.02)" : "transparent" }}>
+                                  <TableCell sx={{ fontSize: "0.82rem", pl: groupName ? 3.5 : 2 }}>
+                                    {displayName}
+                                    {ln.notes && <Typography sx={{ fontSize: "0.7rem", color: "#aaa" }}>{ln.notes}</Typography>}
+                                  </TableCell>
+                                  {/* Division chip — only rendered in Baseball/Softball categories */}
+                                  {DIVISION_CATEGORIES.has(cat.value) && (() => {
+                                    const div = DIVISIONS.find(d => d.value === ln.division)
+                                    return (
+                                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                        {div ? (
+                                          <Chip
+                                            label={div.label}
+                                            size="small"
+                                            onClick={() => setDivFilter(divFilter === div.value ? "" : div.value)}
+                                            sx={{
+                                              height: 18, fontSize: "0.65rem", fontWeight: 600,
+                                              bgcolor: div.color + "22",
+                                              color: div.color,
+                                              border: `1px solid ${div.color}66`,
+                                              cursor: "pointer",
+                                              outline: divFilter === div.value ? `2px solid ${div.color}` : "none",
+                                            }}
+                                          />
+                                        ) : (
+                                          <Typography sx={{ fontSize: "0.72rem", color: "#bbb" }}>—</Typography>
+                                        )}
+                                      </TableCell>
+                                    )
+                                  })()}
+                                  {/* Qty */}
+                                  <TableCell sx={{ fontSize: "0.78rem", textAlign: "right", color: "#555", whiteSpace: "nowrap" }}>
+                                    {ln.quantity ?? "—"}
+                                  </TableCell>
+                                  {/* Unit cost */}
+                                  <TableCell sx={{ fontSize: "0.78rem", textAlign: "right", color: "#555", whiteSpace: "nowrap" }}>
+                                    {ln.unit_cost ? fmt(parseFloat(ln.unit_cost)) : "—"}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Chip
+                                      label={ln.is_revenue ? "Income" : "Expense"}
+                                      size="small"
+                                      sx={{
+                                        height: 18, fontSize: "0.65rem", fontWeight: 700,
+                                        bgcolor: ln.is_revenue ? "rgba(46,125,50,0.1)" : "rgba(196,18,48,0.08)",
+                                        color: ln.is_revenue ? "#2e7d32" : RED,
+                                      }}
+                                    />
+                                  </TableCell>
+                                  <TableCell sx={{ fontSize: "0.78rem", color: "#777" }}>{ln.owner_role || "—"}</TableCell>
+                                  <TableCell sx={{ fontSize: "0.82rem", textAlign: "right", color: "#555" }}>
+                                    {fmt(parseFloat(ln.actual ?? "0") || null)}
+                                  </TableCell>
+                                  <TableCell sx={{ fontSize: "0.82rem", textAlign: "right", fontWeight: 600 }}>
+                                    {fmt(parseFloat(ln.effective_estimate ?? "0") || null)}
+                                    {ln.quantity && ln.unit_cost && (
+                                      <Chip label="qty" size="small" sx={{ ml: 0.5, height: 14, fontSize: "0.6rem", bgcolor: "#e3f2fd", color: "#1565c0" }} />
+                                    )}
+                                    {!ln.quantity && ln.estimate_override && (
+                                      <Chip label="set" size="small" sx={{ ml: 0.5, height: 14, fontSize: "0.6rem", bgcolor: "#fff3e0", color: "#e65100" }} />
+                                    )}
+                                  </TableCell>
+                                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                    <Tooltip title="Edit">
+                                      <Button size="small" sx={{ minWidth: 0, p: 0.5, color: "#888" }}
+                                        onClick={() => { setEditLine(ln); setDialogOpen(true) }}>
+                                        <EditIcon sx={{ fontSize: 15 }} />
+                                      </Button>
+                                    </Tooltip>
+                                    <Tooltip title="Delete">
+                                      <Button size="small" sx={{ minWidth: 0, p: 0.5, color: "#ccc", "&:hover": { color: RED } }}
+                                        onClick={() => handleDelete(ln.id)}>
+                                        <DeleteOutlineIcon sx={{ fontSize: 15 }} />
+                                      </Button>
+                                    </Tooltip>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })
+                          }
                         })
                         return rows
                       })()}

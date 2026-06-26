@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import ContactActions from "../components/ContactActions"
 import client from "../api/client"
+import PublicLinkBar from "../components/PublicLinkBar"
+import { useAppSettings } from "../context/AppSettingsContext"
 import {
   Alert,
   Box,
@@ -495,6 +497,7 @@ function formatTime(iso: string) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function VolunteerSignupPage({ isPublic = false }: { isPublic?: boolean }) {
+  const { settings } = useAppSettings()
   const [games, setGames] = useState<VolunteerGame[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -561,6 +564,15 @@ export default function VolunteerSignupPage({ isPublic = false }: { isPublic?: b
 
   return (
     <Box>
+      {/* Public link bar — admin only */}
+      {!isPublic && (
+        <PublicLinkBar
+          publicPath="/public/volunteer-signups"
+          live={settings.signups.volunteer}
+          secondaryColor={settings.secondaryColor}
+        />
+      )}
+
       {/* Header */}
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>

@@ -22,15 +22,34 @@ import type { Team } from '@/models/team'
 
 const RED = '#C41230'
 
-const DIVISION_ORDER = ['PeeWee', 'AA', 'AAA', 'Majors', 'Softball']
+// Program-type grouping — Recreation first, then Showcase; Field Rental excluded
+interface ProgramGroup {
+  label: string
+  color: string
+  divisions: Record<string, Team[]>
+}
 
-function groupByDivision(teams: Team[]): Record<string, Team[]> {
-  return teams.reduce<Record<string, Team[]>>((acc, team) => {
-    const key = team.division?.name ?? 'Unassigned'
-    if (!acc[key]) acc[key] = []
-    acc[key].push(team)
-    return acc
-  }, {})
+function groupByProgram(teams: Team[]): ProgramGroup[] {
+  // Exclude Field Rental (is_calendar_only) teams
+  const active = teams.filter(t => !t.division?.is_calendar_only)
+
+  const rec: Record<string, Team[]> = {}
+  const show: Record<string, Team[]> = {}
+  const other: Record<string, Team[]> = {}
+
+  for (const team of active) {
+    const divName = team.division?.name ?? 'Unassigned'
+    const pt = team.division?.program_type ?? ''
+    const target = pt === 'RECREATION' ? rec : pt === 'SHOWCASE' ? show : other
+    if (!target[divName]) target[divName] = []
+    target[divName].push(team)
+  }
+
+  const groups: ProgramGroup[] = []
+  if (Object.keys(rec).length) groups.push({ label: 'Recreation', color: '#1565c0', divisions: rec })
+  if (Object.keys(show).length) groups.push({ label: 'Showcase', color: '#6a1b9a', divisions: show })
+  if (Object.keys(other).length) groups.push({ label: 'Other', color: '#555', divisions: other })
+  return groups
 }
 
 // ── Status chip ───────────────────────────────────────────────────────────────
@@ -63,7 +82,7 @@ export default function TeamsPage() {
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [pitchersOnly, setPitchersOnly] = useState(false)
+  const [pitchersOnly, setPitchersOnly] = useState(true)
 
   const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null)
   const [rosterMap, setRosterMap] = useState<Record<number, any[]>>({})
@@ -101,11 +120,7 @@ export default function TeamsPage() {
 
   if (error) return <Alert severity="error">{error}</Alert>
 
-  const grouped = groupByDivision(teams)
-  const divisionKeys = [
-    ...DIVISION_ORDER.filter(d => grouped[d]),
-    ...Object.keys(grouped).filter(d => !DIVISION_ORDER.includes(d)),
-  ]
+  const programGroups = groupByProgram(teams)
 
   return (
     <Box>
@@ -134,15 +149,25 @@ export default function TeamsPage() {
         />
       </Box>
 
-      {divisionKeys.map(divName => (
-        <Box key={divName} sx={{ mb: 3 }}>
-          {/* Division label */}
-          <Typography sx={{ fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#888', mb: 1 }}>
-            {divName}
-          </Typography>
+      {programGroups.map(pg => (
+        <Box key={pg.label} sx={{ mb: 4 }}>
+          {/* Program group header */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <Box sx={{ width: 3, height: 18, bgcolor: pg.color, borderRadius: 1 }} />
+            <Typography sx={{ fontWeight: 700, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: pg.color }}>
+              {pg.label}
+            </Typography>
+          </Box>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            {grouped[divName].map(team => {
+          {Object.keys(pg.divisions).sort().map(divName => (
+            <Box key={divName} sx={{ mb: 3 }}>
+              {/* Division label */}
+              <Typography sx={{ fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#888', mb: 1, pl: 1 }}>
+                {divName}
+              </Typography>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {pg.divisions[divName].map(team => {
               const isOpen = expandedTeamId === team.id
               const roster: any[] = rosterMap[team.id] ?? []
               const displayRoster = pitchersOnly
@@ -288,9 +313,11 @@ export default function TeamsPage() {
                     )}
                   </Collapse>
                 </Paper>
-              )
-            })}
-          </Box>
+                )
+              })}
+              </Box>
+            </Box>
+          ))}
         </Box>
       ))}
     </Box>

@@ -56,7 +56,8 @@ export default function PlayerDetailPage() {
 
   // Edit profile state
   const [editOpen, setEditOpen] = useState(false)
-  const [editFields, setEditFields] = useState<Partial<Player>>({})
+  const [editFields, setEditFields] = useState<Partial<Player> & { division?: number | "" }>({})
+  const [divisions, setDivisions] = useState<{ id: number; name: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -80,7 +81,13 @@ export default function PlayerDetailPage() {
       teammate_request: player.teammate_request ?? "",
       coach_request: player.coach_request ?? "",
       sport: player.sport ?? "baseball",
+      division: player.division_id ?? "",
     })
+    // Fetch divisions filtered by sport
+    const sport = player.sport || "baseball"
+    client.get("/divisions/", { params: { sport } })
+      .then(res => setDivisions(res.data ?? []))
+      .catch(() => {})
     setSaveError(null)
     setEditOpen(true)
   }
@@ -257,10 +264,22 @@ export default function PlayerDetailPage() {
               select SelectProps={{ native: true }}>
               {['', 'R', 'L'].map(s => <option key={s} value={s}>{s || '—'}</option>)}
             </TextField>
-            <TextField label="Sport" size="small" value={editFields.sport ?? 'baseball'} onChange={e => setEditFields(p => ({ ...p, sport: e.target.value }))}
+            <TextField label="Sport" size="small" value={editFields.sport ?? 'baseball'} onChange={e => {
+                const sport = e.target.value
+                setEditFields(p => ({ ...p, sport, division: "" }))
+                client.get("/divisions/", { params: { sport } })
+                  .then(res => setDivisions(res.data ?? []))
+                  .catch(() => {})
+              }}
               select SelectProps={{ native: true }}>
               <option value="baseball">Baseball</option>
               <option value="softball">Softball</option>
+            </TextField>
+            <TextField label="Division" size="small" value={editFields.division ?? ""}
+              onChange={e => setEditFields(p => ({ ...p, division: e.target.value ? Number(e.target.value) : "" }))}
+              select SelectProps={{ native: true }}>
+              <option value="">— No Division —</option>
+              {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </TextField>
           </Box>
           {/* Role flags */}

@@ -1,7 +1,15 @@
 import axios from "axios";
 
+// In development the Vite proxy rewrites /api → http://localhost:8000/api,
+// so an empty VITE_API_URL (or no .env.local at all) just works.
+// In production (Vercel) set VITE_API_URL=https://your-backend.railway.app
+// in the Vercel dashboard → Settings → Environment Variables.
+const BASE_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : "/api";
+
 const apiClient = axios.create({
-  baseURL: "/api",
+  baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },

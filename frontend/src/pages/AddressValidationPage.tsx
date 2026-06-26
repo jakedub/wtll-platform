@@ -483,6 +483,8 @@ export default function AddressValidationPage() {
   const [siblingLoading, setSiblingLoading] = useState(false)
   const [siblingDone, setSiblingDone] = useState(false)
   const [siblingResult, setSiblingResult] = useState<SiblingResult | null>(null)
+  const [applyingEmail, setApplyingEmail] = useState<string | null>(null)
+  const [appliedEmails, setAppliedEmails] = useState<Set<string>>(new Set())
 
   const [error, setError] = useState<string | null>(null)
 
@@ -838,6 +840,44 @@ export default function AddressValidationPage() {
                       </Box>
                     ))}
                   </Box>
+
+                  {/* Apply button — only for groups with the younger sibling rule */}
+                  {group.has_qualifying_sibling && (
+                    <Box sx={{ mt: 1.5, display: "flex", justifyContent: "flex-end" }}>
+                      {appliedEmails.has(group.email) ? (
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                          <CheckCircleOutlineIcon sx={{ color: "#2e7d32", fontSize: 14 }} />
+                          <Typography sx={{ fontSize: "0.72rem", color: "#2e7d32", fontWeight: 600 }}>
+                            Eligibility applied
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          disabled={applyingEmail === group.email}
+                          onClick={async () => {
+                            const ids = group.players
+                              .filter(p => p.younger_sibling_eligible)
+                              .map(p => p.id)
+                            if (!ids.length) return
+                            setApplyingEmail(group.email)
+                            try {
+                              await client.post("/players/sibling-check/", { player_ids: ids })
+                              setAppliedEmails(prev => new Set([...prev, group.email]))
+                            } catch {
+                              // ignore — user can retry
+                            } finally {
+                              setApplyingEmail(null)
+                            }
+                          }}
+                          sx={{ fontSize: "0.72rem", bgcolor: "#2e7d32", "&:hover": { bgcolor: "#1b5e20" }, py: 0.5 }}
+                        >
+                          {applyingEmail === group.email ? "Applying…" : "Apply Eligibility"}
+                        </Button>
+                      )}
+                    </Box>
+                  )}
                 </Paper>
               ))}
             </Box>

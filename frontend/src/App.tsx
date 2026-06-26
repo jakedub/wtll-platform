@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useMemo } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ThemeProvider, CssBaseline } from '@mui/material'
 import '@fontsource/inter/400.css'
 import '@fontsource/inter/500.css'
@@ -7,7 +8,8 @@ import '@fontsource/inter/700.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/600.css'
 
-import theme from './theme'
+import { createDynamicTheme } from './theme'
+import { AppSettingsProvider, useAppSettings } from './context/AppSettingsContext'
 import AppLayout from './components/AppLayout'
 import PlayersPage from './pages/PlayersPage'
 import PlayerDetailPage from './pages/PlayerDetailPage'
@@ -61,78 +63,96 @@ import AuthCallbackPage from './pages/AuthCallbackPage'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 
-export default function App() {
+// ── Inner component — can call useAppSettings() since it's inside the provider ──
+function AppWithTheme() {
+  const { settings } = useAppSettings()
+
+  // Rebuild the MUI theme whenever brand colors change
+  const theme = useMemo(
+    () => createDynamicTheme(settings.primaryColor, settings.secondaryColor),
+    [settings.primaryColor, settings.secondaryColor]
+  )
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
-        {/* Public-facing pages — no AppLayout sidebar, no auth required */}
-        <Routes>
-          <Route path="/public/umpire-signups" element={<PublicUmpireSignupPage />} />
-          <Route path="/public/volunteer-signups" element={<PublicVolunteerSignupPage />} />
-          <Route path="/public/evaluations" element={<PublicEvaluationListPage />} />
-          <Route path="/public/evaluations/:id" element={<PublicEvaluationPage />} />
-          <Route path="/public/pitch-log" element={<PublicPitchLogPage />} />
-          <Route path="/public/pitch-count" element={<PublicPitchCountPage />} />
-          <Route path="/public/softball-innings" element={<PublicSoftballInningsPage />} />
-          {/* Auth routes — also public */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/auth/callback" element={<AuthCallbackPage />} />
-          <Route path="/*" element={
-            <ProtectedRoute>
-            <AppLayout>
-              <Routes>
-                <Route path="/" element={<DashboardPage />} />
-            <Route path="/section/:sectionId" element={<SectionDashboardPage />} />
-            <Route path="/players" element={<PlayersPage />} />
-            <Route path="/players/:id" element={<PlayerDetailPage />} />
-            <Route path="/teams" element={<TeamsPage />} />
-            <Route path="/pitch-log" element={<PitchLogPage />} />
-            <Route path="/softball-innings" element={<SoftballInningLogPage />} />
-            <Route path="/team-calendars" element={<AllTeamsCalendar />} />
-            <Route path="/team-calendars/:id" element={<TeamCalendar/>}/>
-            <Route path="/baseball-schedule" element={<AllTeamsCalendar sport="baseball" />} />
-            <Route path="/softball-schedule" element={<AllTeamsCalendar sport="softball" />} />
-            <Route path="/calendar" element={<CalendarPage/>}/>
-            <Route path="/agenda" element={<AgendaPage />} />
-            <Route path="/mobile-calendar" element={<MobileCalendarPage />} />
-            <Route path="/umpire-signups" element={<UmpireSignupPage />} />
-            <Route path="/player-import" element={<PlayerImportPage />} />
-            <Route path="/address-validation" element={<AddressValidationPage />} />
-            <Route path="/evaluations-hub" element={<EvaluationsHubPage />} />
-            <Route path="/evaluations/print" element={<PrintEvaluationFormsPage />} />
-            <Route path="/evaluations" element={<EvaluationsPage />} />
-            <Route path="/draft" element={<DraftListPage />} />
-            <Route path="/draft/:id" element={<DraftRoomPage />} />
-            <Route path="/board-hub" element={<BoardHubPage />} />
-            <Route path="/board-members" element={<BoardMembersPage />} />
-            <Route path="/documents" element={<DocumentsPage />} />
-            <Route path="/volunteer-signups" element={<VolunteerSignupPage />} />
-            <Route path="/all-stars" element={<AllStarsPage />} />
-            <Route path="/recycling-bin" element={<RecyclingBinPage />} />
-            <Route path="/team-management" element={<TeamManagementPage />} />
-            <Route path="/team-management/softball" element={<TeamManagementPage />} />
-            <Route path="/program-years" element={<ProgramYearPage />} />
-            <Route path="/evaluation-signups" element={<EvaluationSignupPage />} />
-            <Route path="/evaluation-events" element={<EvaluationEventsPage />} />
-            <Route path="/calendar-management" element={<CalendarManagementPage />} />
-                <Route path="/budget" element={<BudgetPage />} />
-                <Route path="/fundraising" element={<FundraisingPage />} />
-                <Route path="/district-leadership" element={<DistrictLeadershipPage />} />
-                <Route path="/boundaries" element={<BoundariesPage />} />
-                <Route path="/vendors" element={<VendorsPage />} />
-                <Route path="/schedule-generator" element={<ScheduleGeneratorPage />} />
-                <Route path="/locations" element={<LocationsPage />} />
-                <Route path="/guide" element={<GuidePage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </Routes>
-            </AppLayout>
-            </ProtectedRoute>
-          } />
-        </Routes>
+          {/* Public-facing pages — no AppLayout sidebar, no auth required */}
+          <Routes>
+            <Route path="/public/umpire-signups"     element={<PublicUmpireSignupPage />} />
+            <Route path="/public/volunteer-signups"  element={<PublicVolunteerSignupPage />} />
+            <Route path="/public/evaluations"        element={<PublicEvaluationListPage />} />
+            <Route path="/public/evaluations/:id"    element={<PublicEvaluationPage />} />
+            <Route path="/public/pitch-log"          element={<PublicPitchLogPage />} />
+            <Route path="/public/pitch-count"        element={<PublicPitchCountPage />} />
+            <Route path="/public/softball-innings"   element={<PublicSoftballInningsPage />} />
+            {/* Auth routes — also public */}
+            <Route path="/login"         element={<LoginPage />} />
+            <Route path="/auth/callback" element={<AuthCallbackPage />} />
+            <Route path="/*" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Routes>
+                    <Route path="/"                      element={<DashboardPage />} />
+                    <Route path="/section/:sectionId"    element={<SectionDashboardPage />} />
+                    <Route path="/players"               element={<PlayersPage />} />
+                    <Route path="/players/:id"           element={<PlayerDetailPage />} />
+                    <Route path="/teams"                 element={<TeamsPage />} />
+                    <Route path="/pitch-log"             element={<PitchLogPage />} />
+                    <Route path="/softball-innings"      element={<SoftballInningLogPage />} />
+                    <Route path="/team-calendars"        element={<AllTeamsCalendar />} />
+                    <Route path="/team-calendars/:id"    element={<TeamCalendar />} />
+                    <Route path="/baseball-schedule"     element={<AllTeamsCalendar sport="baseball" />} />
+                    <Route path="/softball-schedule"     element={<AllTeamsCalendar sport="softball" />} />
+                    <Route path="/calendar"              element={<CalendarPage />} />
+                    <Route path="/agenda"                element={<AgendaPage />} />
+                    <Route path="/mobile-calendar"       element={<MobileCalendarPage />} />
+                    <Route path="/umpire-signups"        element={<UmpireSignupPage />} />
+                    <Route path="/player-import"         element={<PlayerImportPage />} />
+                    <Route path="/address-validation"    element={<AddressValidationPage />} />
+                    <Route path="/evaluations-hub"       element={<EvaluationsHubPage />} />
+                    <Route path="/evaluations/print"     element={<PrintEvaluationFormsPage />} />
+                    <Route path="/evaluations"           element={<EvaluationsPage />} />
+                    <Route path="/draft"                 element={<DraftListPage />} />
+                    <Route path="/draft/:id"             element={<DraftRoomPage />} />
+                    <Route path="/board-hub"             element={<BoardHubPage />} />
+                    <Route path="/board-members"         element={<BoardMembersPage />} />
+                    <Route path="/documents"             element={<DocumentsPage />} />
+                    <Route path="/volunteer-signups"     element={<VolunteerSignupPage />} />
+                    <Route path="/all-stars"             element={<AllStarsPage />} />
+                    <Route path="/recycling-bin"         element={<RecyclingBinPage />} />
+                    <Route path="/team-management"       element={<TeamManagementPage />} />
+                    <Route path="/team-management/softball" element={<TeamManagementPage />} />
+                    <Route path="/program-years"         element={<ProgramYearPage />} />
+                    <Route path="/evaluation-signups"    element={<EvaluationSignupPage />} />
+                    <Route path="/evaluation-events"     element={<EvaluationEventsPage />} />
+                    <Route path="/calendar-management"   element={<CalendarManagementPage />} />
+                    <Route path="/budget"                element={<BudgetPage />} />
+                    <Route path="/fundraising"           element={<FundraisingPage />} />
+                    <Route path="/district-leadership"   element={<DistrictLeadershipPage />} />
+                    <Route path="/boundaries"            element={<BoundariesPage />} />
+                    <Route path="/vendors"               element={<VendorsPage />} />
+                    <Route path="/schedule-generator"    element={<ScheduleGeneratorPage />} />
+                    <Route path="/locations"             element={<LocationsPage />} />
+                    <Route path="/guide"                 element={<GuidePage />} />
+                    <Route path="/settings"              element={<SettingsPage />} />
+                  </Routes>
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+          </Routes>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
+  )
+}
+
+// ── Root — AppSettingsProvider must wrap everything so theme/nav can react ──
+export default function App() {
+  return (
+    <AppSettingsProvider>
+      <AppWithTheme />
+    </AppSettingsProvider>
   )
 }

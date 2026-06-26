@@ -18,16 +18,41 @@ import client from "../api/client"
 
 const RED = "#C41230"
 
-// ── Static built-in files (from public/forms/) ───────────────────────────────
+// ── Static built-in files ─────────────────────────────────────────────────────
+// Two kinds of file entries:
+//   { name, filename, description, tag }       → served from /forms/<filename>
+//   { name, endpoint, description, tag, ext }  → fetched from the API and downloaded
 
-const STATIC_FOLDERS = [
+interface StaticFileEntry {
+  name:        string
+  description: string
+  tag?:        string
+  filename?:   string   // served from /forms/
+  endpoint?:   string   // API endpoint path (e.g. "/forms/oob/")
+  ext?:        string   // file extension label when using endpoint
+}
+
+const STATIC_FOLDERS: { name: string; description: string; files: StaticFileEntry[] }[] = [
   {
     name: "All Star Forms",
     description: "Official Little League tournament forms — blank/unmarked versions ready to print.",
     files: [
-      { name: "Tournament Verification Form",      filename: "TVF_blank.pdf",                 description: "Little League Tournament Player Verification — completed per player for district submission.", tag: "Required: all players" },
-      { name: "Baseball School Enrollment Form",   filename: "Baseball_Enrollment_blank.pdf",  description: "School Enrollment Form with Baseball division pre-selected — completed by school administrator.", tag: "New players only" },
-      { name: "Softball School Enrollment Form",   filename: "Softball_Enrollment_blank.pdf",  description: "School Enrollment Form with Softball division pre-selected — completed by school administrator.", tag: "New players only" },
+      { name: "Tournament Verification Form",      filename: "TVF_blank.pdf",                description: "Little League Tournament Player Verification — completed per player for district submission.",  tag: "Required: all players" },
+      { name: "Baseball School Enrollment Form",   filename: "Baseball_Enrollment_blank.pdf", description: "School Enrollment Form with Baseball division pre-selected — completed by school administrator.", tag: "New players only" },
+      { name: "Softball School Enrollment Form",   filename: "Softball_Enrollment_blank.pdf", description: "School Enrollment Form with Softball division pre-selected — completed by school administrator.", tag: "New players only" },
+    ],
+  },
+  {
+    name: "Player Eligibility Forms",
+    description: "Out-of-Boundary waivers and eligibility documentation. Forms are pre-filled with WTLL league info — fill in player and home league details before submitting to the District Administrator.",
+    files: [
+      {
+        name:        "Out-of-Boundary Waiver Request Form",
+        endpoint:    "/forms/oob/",
+        ext:         "xlsx",
+        description: "OOB waiver for players not residing or attending school within WTLL boundaries. Pre-filled with league name, ID, and president contact — complete player/home league sections before sending to DA.",
+        tag:         "Submit to DA by June 1",
+      },
     ],
   },
   {
@@ -293,7 +318,7 @@ function FolderCard({
 }: {
   folderName: string
   description: string
-  staticFiles: { name: string; filename: string; description: string; tag?: string }[]
+  staticFiles: StaticFileEntry[]
   uploadedDocs: UploadedDoc[]
   query: string
   onUpload: () => void
@@ -346,23 +371,35 @@ function FolderCard({
           <Box sx={{ px: 2.5, py: 2, color: "#bbb", fontSize: "0.82rem" }}>No documents yet. Click the upload icon to add files.</Box>
         ) : (
           <Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 0.5 }}>
-            {/* Static (built-in) files */}
-            {filteredStatic.map(file => (
-              <Box key={file.filename} sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.25, borderRadius: 1.5, border: "1px solid #f0f0f0", "&:hover": { bgcolor: "#fafafa", borderColor: "#e4e4e7" }, transition: "all 0.12s" }}>
-                <DescriptionIcon sx={{ color: extColor(file.filename.split(".").pop() ?? ""), fontSize: 20, flexShrink: 0 }} />
+            {/* Static / generated built-in files */}
+            {filteredStatic.map(file => {
+              const ext = file.ext ?? file.filename?.split(".").pop() ?? ""
+              const isGenerated = Boolean(file.endpoint)
+              const downloadHref = isGenerated
+                ? (client.defaults.baseURL ?? "").replace(/\/$/, "") + file.endpoint
+                : `/forms/${file.filename}`
+              return (
+              <Box key={file.name} sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.25, borderRadius: 1.5, border: "1px solid #f0f0f0", "&:hover": { bgcolor: "#fafafa", borderColor: "#e4e4e7" }, transition: "all 0.12s" }}>
+                <DescriptionIcon sx={{ color: ext === "xlsx" ? "#2e7d32" : extColor(ext), fontSize: 20, flexShrink: 0 }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 600, fontSize: "0.85rem" }}>{file.name}</Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                    <Typography sx={{ fontWeight: 600, fontSize: "0.85rem" }}>{file.name}</Typography>
+                    {isGenerated && (
+                      <Chip label="Pre-filled" size="small" sx={{ bgcolor: "#e8f5e9", color: "#2e7d32", fontSize: "0.65rem", height: 18, flexShrink: 0 }} />
+                    )}
+                  </Box>
                   <Typography sx={{ fontSize: "0.75rem", color: "#888" }}>{file.description}</Typography>
                 </Box>
                 {file.tag && <Chip label={file.tag} size="small" sx={{ bgcolor: "#f0f7ff", color: "#1565c0", fontSize: "0.68rem", height: 20, flexShrink: 0 }} />}
-                <Tooltip title="Download">
-                  <Box component="a" href={`/forms/${file.filename}`} download={file.name}
+                <Tooltip title={isGenerated ? "Download (pre-filled with WTLL info)" : "Download"}>
+                  <Box component="a" href={downloadHref} download={file.name} target={isGenerated ? "_blank" : undefined}
                     sx={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 1, color: "#888", flexShrink: 0, "&:hover": { bgcolor: `${RED}12`, color: RED }, transition: "all 0.12s" }}>
                     <DownloadIcon sx={{ fontSize: 18 }} />
                   </Box>
                 </Tooltip>
               </Box>
-            ))}
+              )
+            })}
 
             {/* Uploaded files */}
             {filteredUploaded.map(doc => (

@@ -91,14 +91,87 @@ function EditableField({ label, value, onSave, placeholder }: { label: string; v
   )
 }
 
+// ── Coach field with board-member autocomplete ────────────────────────────────
+
+function CoachEditableField({
+  label, value, onSave, placeholder, suggestions, helperText,
+}: {
+  label: string; value: string; onSave: (v: string) => void
+  placeholder?: string; suggestions: string[]; helperText?: string
+}) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(value)
+
+  const save = () => { onSave(val.trim()); setEditing(false) }
+
+  if (editing) {
+    return (
+      <Box>
+        <Box sx={{ display: "flex", gap: 0.75, alignItems: "flex-start" }}>
+          <Autocomplete
+            freeSolo
+            options={suggestions}
+            value={val}
+            onInputChange={(_, newVal) => setVal(newVal)}
+            onChange={(_, newVal) => { if (typeof newVal === "string") setVal(newVal) }}
+            sx={{ flex: 1 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                size="small"
+                label={label}
+                placeholder={placeholder}
+                autoFocus
+                sx={{ "& input": { fontSize: "0.83rem" } }}
+                onKeyDown={e => {
+                  if (e.key === "Enter") save()
+                  if (e.key === "Escape") { setVal(value); setEditing(false) }
+                }}
+              />
+            )}
+          />
+          <Tooltip title="Save">
+            <Button size="small" sx={{ minWidth: 0, p: 0.5, color: "#2e7d32", mt: 0.5 }} onClick={save}>
+              <SaveIcon sx={{ fontSize: 16 }} />
+            </Button>
+          </Tooltip>
+          <Tooltip title="Cancel">
+            <Button size="small" sx={{ minWidth: 0, p: 0.5, color: "#aaa", mt: 0.5 }} onClick={() => { setVal(value); setEditing(false) }}>
+              <CancelIcon sx={{ fontSize: 16 }} />
+            </Button>
+          </Tooltip>
+        </Box>
+        {helperText && (
+          <Typography sx={{ fontSize: "0.68rem", color: "#aaa", mt: 0.4, ml: 0.5 }}>{helperText}</Typography>
+        )}
+      </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minHeight: 28 }}>
+      <Box sx={{ flex: 1 }}>
+        <Typography sx={{ fontSize: "0.68rem", color: "#aaa", lineHeight: 1 }}>{label}</Typography>
+        <Typography sx={{ fontSize: "0.83rem", color: val ? "#111" : "#bbb" }}>{val || "—"}</Typography>
+      </Box>
+      <Tooltip title={`Edit ${label}`}>
+        <Button size="small" sx={{ minWidth: 0, p: 0.4, color: "#ccc", "&:hover": { color: RED } }} onClick={() => setEditing(true)}>
+          <EditIcon sx={{ fontSize: 14 }} />
+        </Button>
+      </Tooltip>
+    </Box>
+  )
+}
+
 // ── Team card ─────────────────────────────────────────────────────────────────
 
-function TeamCard({ team, onUpdate, onAssign, onRemove, onDelete }: {
+function TeamCard({ team, onUpdate, onAssign, onRemove, onDelete, boardMemberNames }: {
   team: TeamData
   onUpdate: (id: number, data: Partial<TeamData>) => void
   onAssign: (teamId: number, divisionId: number | null) => void
   onRemove: (teamId: number, playerId: number, name: string) => void
   onDelete: (teamId: number, teamName: string) => void
+  boardMemberNames: string[]
 }) {
   const [open, setOpen] = useState(false)
 
@@ -123,9 +196,12 @@ function TeamCard({ team, onUpdate, onAssign, onRemove, onDelete }: {
       <Collapse in={open}>
         <Box sx={{ px: 2, pt: 1.5, pb: 2 }}>
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, mb: 2 }}>
-            <EditableField label="Head Coach" value={team.coach || ""} placeholder="Coach name"
+            <CoachEditableField label="Head Coach" value={team.coach || ""} placeholder="Coach name"
+              suggestions={boardMemberNames}
               onSave={v => onUpdate(team.id, { coach: v })} />
-            <EditableField label="Assistant Coach" value={team.assistant_coach || ""} placeholder="Asst. coach name"
+            <CoachEditableField label="Assistant Coach" value={team.assistant_coach || ""} placeholder="Asst. coach name"
+              suggestions={boardMemberNames}
+              helperText="Separate multiple coaches with a comma, e.g. John Smith, Jane Doe"
               onSave={v => onUpdate(team.id, { assistant_coach: v })} />
 <EditableField label="Jersey Color" value={team.jersey_color || ""} placeholder="e.g. Red"
               onSave={v => onUpdate(team.id, { jersey_color: v })} />
@@ -180,6 +256,7 @@ export default function TeamManagementPage() {
   const [error, setError] = useState<string | null>(null)
   const [year, setYear] = useState(new Date().getFullYear())
   const [createOpen, setCreateOpen] = useState(false)
+  const [boardMemberNames, setBoardMemberNames] = useState<string[]>([])
   // Filters
   const [programFilter, setProgramFilter] = useState("ALL")
   const [teamFilter, setTeamFilter] = useState<string[]>([])
@@ -198,6 +275,16 @@ export default function TeamManagementPage() {
   }, [sportParam, year])
 
   useEffect(() => { load() }, [load])
+
+  // Load board member names for coach autocomplete
+  useEffect(() => {
+    client.get("/board-members/")
+      .then(r => {
+        const list: any[] = r.data?.data ?? r.data ?? []
+        setBoardMemberNames(list.map((b: any) => `${b.first_name} ${b.last_name}`.trim()).filter(Boolean).sort())
+      })
+      .catch(() => {})
+  }, [])
 
   const handleUpdate = async (id: number, data: Partial<TeamData>) => {
     try {
@@ -384,6 +471,7 @@ export default function TeamManagementPage() {
                 onAssign={openAssign}
                 onRemove={handleRemove}
                 onDelete={handleDeleteTeam}
+                boardMemberNames={boardMemberNames}
               />
             ))}
           </Box>

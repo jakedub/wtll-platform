@@ -13,7 +13,9 @@ import RefreshIcon from "@mui/icons-material/Refresh"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import BlockIcon from "@mui/icons-material/Block"
+import SportsBaseballIcon from "@mui/icons-material/SportsBaseball"
 import PublicNav from "../components/PublicNav"
+import PublicRoleGate from "../components/PublicRoleGate"
 import client from "../api/client"
 
 const RED = "#C41230"
@@ -72,16 +74,23 @@ export default function PublicPitchCountPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [pitchersOnly, setPitchersOnly] = useState(true)
 
-  const load = () => {
+  const load = (po = pitchersOnly) => {
     setLoading(true); setError(null)
-    client.get("/pitch-count/public-summary/")
+    client.get(`/pitch-count/public-summary/?pitchers_only=${po}`)
       .then(r => { setRows(r.data.results ?? []); setLastRefresh(new Date()) })
       .catch(() => setError("Failed to load pitch data. Check your connection."))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const togglePitchersOnly = () => {
+    const next = !pitchersOnly
+    setPitchersOnly(next)
+    load(next)
+  }
 
   // Group by division
   const byDivision = rows.reduce<Record<string, PitcherRow[]>>((acc, r) => {
@@ -96,8 +105,9 @@ export default function PublicPitchCountPage() {
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f4f4f5" }}>
-      <PublicNav />
+    <PublicRoleGate requires={["is_coach", "is_umpire", "is_staff", "is_board_member"]}>
+      <Box sx={{ minHeight: "100vh", bgcolor: "#f4f4f5" }}>
+        <PublicNav />
 
       <Box sx={{ maxWidth: 900, mx: "auto", px: 2, py: 3 }}>
         {/* Header */}
@@ -109,13 +119,28 @@ export default function PublicPitchCountPage() {
               <Typography sx={{ fontSize: "0.8rem", color: "#777" }}>{today}</Typography>
             </Box>
           </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Chip
+              icon={<SportsBaseballIcon />}
+              label="Pitchers Only"
+              onClick={togglePitchersOnly}
+              variant={pitchersOnly ? "filled" : "outlined"}
+              size="small"
+              sx={{
+                fontWeight: pitchersOnly ? 700 : 500,
+                bgcolor: pitchersOnly ? RED : "transparent",
+                color: pitchersOnly ? "#fff" : "#666",
+                borderColor: pitchersOnly ? RED : "#ccc",
+                "& .MuiChip-icon": { color: pitchersOnly ? "#fff" : "#888" },
+                "&:hover": { bgcolor: pitchersOnly ? "#960E24" : "#f5f5f5" },
+              }}
+            />
             <Typography sx={{ fontSize: "0.72rem", color: "#aaa" }}>
               Updated {lastRefresh.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
             </Typography>
             <Tooltip title="Refresh">
               <span>
-                <IconButton onClick={load} size="small" disabled={loading} sx={{ color: "#888" }}>
+                <IconButton onClick={() => load()} size="small" disabled={loading} sx={{ color: "#888" }}>
                   <RefreshIcon fontSize="small" />
                 </IconButton>
               </span>
@@ -240,7 +265,8 @@ export default function PublicPitchCountPage() {
             </Paper>
           )
         })}
+        </Box>
       </Box>
-    </Box>
+    </PublicRoleGate>
   )
 }

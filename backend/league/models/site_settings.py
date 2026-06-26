@@ -28,6 +28,22 @@ class SiteSettings(models.Model):
     magic_link_expiry_minutes = models.PositiveIntegerField(default=15,
         help_text="How long a magic login link stays valid (minutes). Default: 15.")
 
+    # ── Module toggles ────────────────────────────────────────────────────────
+    # When deploying to a new league, disable modules they don't use yet.
+    # Board section is always enabled (it's the admin core).
+    module_preseason_enabled   = models.BooleanField(default=True,
+        help_text="Enable Pre-Season section (Player Import, Eligibility, Evaluations, Draft).")
+    module_finance_enabled     = models.BooleanField(default=True,
+        help_text="Enable Finance section (Budget, Fundraising).")
+    module_baseball_enabled    = models.BooleanField(default=True,
+        help_text="Enable Baseball Ops section (Pitch Count, Log Pitches, Teams, All Stars).")
+    module_softball_enabled    = models.BooleanField(default=True,
+        help_text="Enable Softball Ops section (Log Innings, Teams, All Stars).")
+    module_schedule_enabled    = models.BooleanField(default=True,
+        help_text="Enable Schedule section (calendars, schedule generator, ICS feeds).")
+    module_involvement_enabled = models.BooleanField(default=True,
+        help_text="Enable Involvement section (Umpire, Volunteer, and Evaluation sign-ups).")
+
     # ── Season ────────────────────────────────────────────────────────────────
     default_program = models.ForeignKey(
         "league.Program",
@@ -74,6 +90,10 @@ class LeagueIdentity(models.Model):
     city  = models.CharField(max_length=100, blank=True, default="")
     state = models.CharField(max_length=50,  blank=True, default="")
 
+    # ── Little League registration ────────────────────────────────────────────
+    little_league_id = models.CharField(max_length=30, blank=True, default="1140814",
+        help_text='Official Little League ID number (e.g. 1140814). Used on OOB waiver forms.')
+
     # ── Contact ───────────────────────────────────────────────────────────────
     contact_email = models.EmailField(blank=True, default="",
         help_text="Public contact email address. Used in magic link emails.")
@@ -83,7 +103,7 @@ class LeagueIdentity(models.Model):
     # ── Branding ──────────────────────────────────────────────────────────────
     primary_color = models.CharField(max_length=7, default="#C41230",
         help_text="Primary brand color as a hex code (e.g. #C41230).")
-    secondary_color = models.CharField(max_length=7, default="#1565c0",
+    secondary_color = models.CharField(max_length=7, default="#C41230",
         help_text="Secondary brand color as a hex code.")
 
     class Meta:

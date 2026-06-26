@@ -29,20 +29,28 @@ def _serialize_site_settings(s) -> dict:
         "magic_link_expiry_minutes":  s.magic_link_expiry_minutes,
         "default_program_id":         s.default_program_id,
         "default_program_name":       s.default_program.name if s.default_program else None,
+        # Module toggles
+        "module_preseason_enabled":   s.module_preseason_enabled,
+        "module_finance_enabled":     s.module_finance_enabled,
+        "module_baseball_enabled":    s.module_baseball_enabled,
+        "module_softball_enabled":    s.module_softball_enabled,
+        "module_schedule_enabled":    s.module_schedule_enabled,
+        "module_involvement_enabled": s.module_involvement_enabled,
     }
 
 
 def _serialize_league_identity(li) -> dict:
     return {
-        "league_name":    li.league_name,
-        "short_name":     li.short_name,
-        "tagline":        li.tagline,
-        "city":           li.city,
-        "state":          li.state,
-        "contact_email":  li.contact_email,
-        "website_url":    li.website_url,
-        "primary_color":  li.primary_color,
-        "secondary_color": li.secondary_color,
+        "league_name":      li.league_name,
+        "short_name":       li.short_name,
+        "tagline":          li.tagline,
+        "city":             li.city,
+        "state":            li.state,
+        "little_league_id": getattr(li, "little_league_id", ""),
+        "contact_email":    li.contact_email,
+        "website_url":      li.website_url,
+        "primary_color":    li.primary_color,
+        "secondary_color":  li.secondary_color,
     }
 
 
@@ -70,6 +78,11 @@ class SiteSettingsView(APIView):
             "umpire_signups_enabled", "volunteer_signups_enabled",
             "evaluation_signups_enabled",
             "magic_link_expiry_minutes", "default_program_id",
+            # Module toggles
+            "module_preseason_enabled",
+            "module_finance_enabled", "module_baseball_enabled",
+            "module_softball_enabled", "module_schedule_enabled",
+            "module_involvement_enabled",
         }
         for field, value in request.data.items():
             if field in allowed:
@@ -111,7 +124,8 @@ class LeagueIdentityView(APIView):
         li = LeagueIdentity.get()
         allowed = {
             "league_name", "short_name", "tagline",
-            "city", "state", "contact_email", "website_url",
+            "city", "state", "little_league_id",
+            "contact_email", "website_url",
             "primary_color", "secondary_color",
         }
         for field, value in request.data.items():
@@ -130,6 +144,21 @@ class PublicLeagueIdentityView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from league.models.site_settings import LeagueIdentity
+        from league.models.site_settings import LeagueIdentity, SiteSettings
         li = LeagueIdentity.get()
-        return Response(_serialize_league_identity(li))
+        ss = SiteSettings.get()
+        data = _serialize_league_identity(li)
+        # Include module flags so the frontend can gate nav sections without auth
+        data.update({
+            "module_preseason_enabled":   ss.module_preseason_enabled,
+            "module_finance_enabled":     ss.module_finance_enabled,
+            "module_baseball_enabled":    ss.module_baseball_enabled,
+            "module_softball_enabled":    ss.module_softball_enabled,
+            "module_schedule_enabled":    ss.module_schedule_enabled,
+            "module_involvement_enabled": ss.module_involvement_enabled,
+            # Public signup form live/disabled status
+            "umpire_signups_enabled":     ss.umpire_signups_enabled,
+            "volunteer_signups_enabled":  ss.volunteer_signups_enabled,
+            "evaluation_signups_enabled": ss.evaluation_signups_enabled,
+        })
+        return Response(data)

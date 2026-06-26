@@ -9,6 +9,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
 import BlockIcon from "@mui/icons-material/Block"
 import PublicNav from "../components/PublicNav"
+import PublicRoleGate from "../components/PublicRoleGate"
 import { getPlayers, getPlayerEnrollments } from "../api/players"
 import client from "../api/client"
 import type { Player } from "@/models/player"
@@ -139,11 +140,12 @@ export default function PublicSoftballInningsPage() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f4f4f5" }}>
-      <PublicNav />
+    <PublicRoleGate requires={["is_coach", "is_staff", "is_board_member"]}>
+      <Box sx={{ minHeight: "100vh", bgcolor: "#f4f4f5" }}>
+        <PublicNav />
 
-      <Box sx={{ maxWidth: 520, mx: "auto", px: 2, py: 3 }}>
-        {/* Header */}
+        <Box sx={{ maxWidth: 520, mx: "auto", px: 2, py: 3 }}>
+          {/* Header */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
           <Box sx={{ width: 4, height: 28, bgcolor: PINK, borderRadius: 1, flexShrink: 0 }} />
           <Box>
@@ -311,8 +313,9 @@ export default function PublicSoftballInningsPage() {
               </Box>
             ))}
           </Box>
-        </Paper>
+                </Paper>
+        </Box>
       </Box>
-    </Box>
+    </PublicRoleGate>
   )
 }

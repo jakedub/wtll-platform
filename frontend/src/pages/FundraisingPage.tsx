@@ -1,55 +1,112 @@
 /**
- * FundraisingPage — internal board capital-improvement fundraising tracker.
+ * FundraisingPage — multi-plan capital improvement + fundraising tracker.
  *
- * Tab 1 — Progress:   Grand total + per-phase progress bars + per-item breakdown
- * Tab 2 — Campaigns:  Named fundraising efforts, deposit logging, earmarking
- * Tab 3 — Facilities Plan: Editable master line-item list
+ * Tab 1 — Progress:   Full-width two-column view; featured plan + plan cards
+ * Tab 2 — Plans:      Drag-and-drop item management across plans
+ * Tab 3 — Campaigns:  Named campaigns with type tags, deposits, in-kind tracking
+ *
+ * Requires: @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities  (npm install)
  */
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress,
-  Dialog, DialogActions, DialogContent, DialogTitle,
-  Divider, FormControlLabel, IconButton, InputAdornment,
-  LinearProgress, MenuItem, Paper, Select, Switch, Tab, Tabs,
-  TextField, Tooltip, Typography,
+  Alert, Box, Button, Chip, CircularProgress,
+  Collapse, Dialog, DialogActions, DialogContent, DialogTitle,
+  Divider, FormControlLabel, Grid, IconButton,
+  InputAdornment, LinearProgress, MenuItem, Paper,
+  Select, Switch, Tab, Tabs, TextField, Tooltip, Typography,
+  Accordion, AccordionSummary, AccordionDetails,
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
-import CheckIcon from "@mui/icons-material/Check"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import CloseIcon from "@mui/icons-material/Close"
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator"
 import EditIcon from "@mui/icons-material/Edit"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
-import CampaignIcon from "@mui/icons-material/Campaign"
-import TrendingUpIcon from "@mui/icons-material/TrendingUp"
-import ConstructionIcon from "@mui/icons-material/Construction"
+import FilterListIcon from "@mui/icons-material/FilterList"
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor,
+  useSensor, useSensors,
+} from "@dnd-kit/core"
+import type { DragEndEvent } from "@dnd-kit/core"
+import {
+  SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy,
+  useSortable, arrayMove,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import client from "../api/client"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface LineItem {
+interface FundraisingItem {
   id: number
-  phase: number
+  plan_id: number | null
+  phase: number | null
   location: string
   description: string
-  category: "INFRA" | "SAFETY" | "AMENITY" | "FULL" | "ELECTRICAL"
+  category: string
   estimate_low: number
   estimate_high: number
+  quoted_price: number | null
   notes: string
   sort_order: number
   is_complete: boolean
   raised: number
 }
 
+interface PhaseGroup {
+  phase: number
+  estimate_low: number
+  estimate_high: number
+  quoted_low: number
+  quoted_high: number
+  has_quotes: boolean
+  raised: number
+  items: FundraisingItem[]
+}
+
+interface PlanSummary {
+  id: number
+  name: string
+  color: string
+  uses_phases: boolean
+  sort_order: number
+  estimate_low: number
+  estimate_high: number
+  quoted_low: number
+  quoted_high: number
+  has_quotes: boolean
+  raised: number
+  structure: PhaseGroup[] | FundraisingItem[]
+}
+
+interface FundraisingSummary {
+  grand_cash_raised: number
+  grand_in_kind_count: number
+  general_unallocated: number
+  plans: PlanSummary[]
+}
+
+interface Plan {
+  id: number
+  name: string
+  description: string
+  uses_phases: boolean
+  color: string
+  is_active: boolean
+  sort_order: number
+}
+
 interface Campaign {
   id: number
   name: string
   description: string
+  campaign_type: string
   goal: number | null
   is_active: boolean
-  created_at: string
   total_raised: number
+  in_kind_count: number
 }
 
 interface Deposit {
@@ -60,369 +117,875 @@ interface Deposit {
   amount: number
   date: string
   notes: string
-}
-
-interface Summary {
-  grand_total_raised: number
-  general_unallocated: number
-  phases: {
-    phase: number
-    estimate_low: number
-    estimate_high: number
-    raised: number
-    items: LineItem[]
-  }[]
+  is_in_kind: boolean
+  in_kind_description: string
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const RED = "#C41230"
-
 const fmt = (n: number) =>
-  "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })
 
-const fmtRange = (lo: number, hi: number) => `${fmt(lo)} – ${fmt(hi)}`
-
-const PHASE_LABELS: Record<number, string> = {
-  1: "Phase 1 — Field Playability",
-  2: "Phase 2 — Infrastructure & Operations",
-  3: "Phase 3 — Amenities & Polish",
+const CAMPAIGN_TYPES: Record<string, { label: string; color: "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" }> = {
+  RAFFLE:      { label: "Raffle",           color: "secondary" },
+  SPONSORSHIP: { label: "Sponsorship",      color: "primary" },
+  GRANT:       { label: "Grant",            color: "success" },
+  EVENT:       { label: "Event",            color: "warning" },
+  DONATION:    { label: "Direct Donation",  color: "info" },
+  OTHER:       { label: "Other",            color: "default" },
 }
 
-const PHASE_COLORS: Record<number, string> = {
-  1: "#C41230",
-  2: "#1565c0",
-  3: "#6a1b9a",
+const CATEGORY_LABELS: Record<string, string> = {
+  INFRA:      "Infrastructure",
+  SAFETY:     "Safety",
+  AMENITY:    "Amenity",
+  FULL:       "Full Field",
+  ELECTRICAL: "Electrical",
 }
 
-const CAT_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  INFRA:      { label: "Infrastructure", bg: "#fde8e8", color: "#9b1414" },
-  SAFETY:     { label: "Safety",         bg: "#fff3cd", color: "#7a5400" },
-  AMENITY:    { label: "Amenity",        bg: "#e8f4fd", color: "#1a5c8a" },
-  FULL:       { label: "Full Build",     bg: "#e8fdf0", color: "#1a6b3a" },
-  ELECTRICAL: { label: "Electrical",     bg: "#f3e8fd", color: "#5a1a8a" },
-}
-
-const CATEGORIES = ["INFRA", "SAFETY", "AMENITY", "FULL", "ELECTRICAL"] as const
-
-function pct(raised: number, lo: number, hi: number): number {
-  const mid = (lo + hi) / 2
-  if (mid <= 0) return 0
-  return Math.min(100, Math.round((raised / mid) * 100))
-}
+const PLAN_COLOR_PALETTE = ["#C41230","#1565c0","#6a1b9a","#e65100","#00838f","#f57f17","#37474f"]
 
 // ── Progress Tab ──────────────────────────────────────────────────────────────
 
-function ProgressTab({ summary }: { summary: Summary | null }) {
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({ 1: true, 2: false, 3: false })
-
-  if (!summary) return <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>
-
-  const totalLow = summary.phases.reduce((s, p) => s + p.estimate_low, 0)
-  const totalHigh = summary.phases.reduce((s, p) => s + p.estimate_high, 0)
-  const grandPct = pct(summary.grand_total_raised, totalLow, totalHigh)
+function PhaseSection({
+  phase, filteredItems, hasQuotes, estimateLow, estimateHigh, quotedLow, quotedHigh,
+}: {
+  phase: number
+  filteredItems: FundraisingItem[]
+  hasQuotes: boolean
+  estimateLow: number
+  estimateHigh: number
+  quotedLow: number
+  quotedHigh: number
+}) {
+  const [open, setOpen] = useState(false)
+  const phTotal = filteredItems.reduce((s, i) => s + (i.quoted_price ?? i.estimate_high), 0)
+  const phRaised = filteredItems.reduce((s, i) => s + i.raised, 0)
+  const pct = phTotal > 0 ? Math.min(100, (phRaised / phTotal) * 100) : 0
 
   return (
-    <Box sx={{ maxWidth: 820 }}>
-      {/* Grand total banner */}
-      <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", mb: 3 }}>
-        <Box sx={{ bgcolor: RED, px: 3, py: 2.5, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 2 }}>
-          <Box>
-            <Typography sx={{ color: "#fff", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.85 }}>
-              Total Capital Improvement Goal
-            </Typography>
-            <Typography sx={{ color: "#fff", fontFamily: "Georgia, serif", fontSize: "1.5rem", fontWeight: 700, mt: 0.25 }}>
-              {fmtRange(totalLow, totalHigh)}
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: "right" }}>
-            <Typography sx={{ color: "#fff", fontSize: "0.72rem", opacity: 0.8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Raised so far</Typography>
-            <Typography sx={{ color: "#fff", fontFamily: "Georgia, serif", fontSize: "2rem", fontWeight: 700, lineHeight: 1 }}>
-              {fmt(summary.grand_total_raised)}
-            </Typography>
-            <Typography sx={{ color: "#ffd6d6", fontSize: "0.75rem", mt: 0.25 }}>{grandPct}% of midpoint estimate</Typography>
-          </Box>
+    <Box sx={{ mb: 1, borderRadius: 1, overflow: "hidden", border: "1px solid", borderColor: "divider" }}>
+      <Box
+        onClick={() => setOpen(o => !o)}
+        sx={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          px: 2, py: 1, cursor: "pointer", bgcolor: "action.hover",
+          "&:hover": { bgcolor: "action.selected" },
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+          <Typography variant="subtitle2">Phase {phase}</Typography>
+          <Chip label={`${filteredItems.length} items`} size="small" sx={{ height: 20 }} />
         </Box>
-        <Box sx={{ px: 3, pt: 1.5, pb: 2, bgcolor: "#1a1a1a" }}>
+        <Box sx={{ textAlign: "right" }}>
+          <Typography variant="caption" color="text.secondary">
+            {fmt(estimateLow)}–{fmt(estimateHigh)}
+            {hasQuotes && <> · Quoted: {fmt(quotedLow)}–{fmt(quotedHigh)}</>}
+          </Typography>
           <LinearProgress
-            variant="determinate" value={grandPct}
-            sx={{ height: 10, borderRadius: 5, bgcolor: "#333", "& .MuiLinearProgress-bar": { bgcolor: RED, borderRadius: 5 } }}
+            variant="determinate"
+            value={pct}
+            sx={{ mt: 0.5, height: 4, borderRadius: 2, minWidth: 120,
+              "& .MuiLinearProgress-bar": { bgcolor: "#2e7d32" } }}
           />
-          {summary.general_unallocated > 0 && (
-            <Typography sx={{ color: "#aaa", fontSize: "0.72rem", mt: 1 }}>
-              {fmt(summary.general_unallocated)} unallocated (general fund) · {fmt(summary.grand_total_raised - summary.general_unallocated)} earmarked to projects
-            </Typography>
-          )}
         </Box>
-      </Paper>
-
-      {/* Per-phase cards */}
-      {summary.phases.map(phase => {
-        const phasePct = pct(phase.raised, phase.estimate_low, phase.estimate_high)
-        const phaseColor = PHASE_COLORS[phase.phase]
-        const isExpanded = expanded[phase.phase] ?? false
-
-        return (
-          <Paper key={phase.phase} variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", mb: 2 }}>
-            {/* Phase header */}
+      </Box>
+      <Collapse in={open}>
+        <Box sx={{ px: 2, py: 1 }}>
+          {filteredItems.map(item => (
             <Box
-              onClick={() => setExpanded(e => ({ ...e, [phase.phase]: !isExpanded }))}
+              key={item.id}
               sx={{
-                display: "flex", alignItems: "center", gap: 2,
-                px: 2, py: 1.5, cursor: "pointer",
-                bgcolor: "#f9fafb", borderBottom: isExpanded ? "1px solid #e4e4e7" : "none",
-                "&:hover": { bgcolor: "#f3f4f6" },
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                py: 0.75, borderBottom: "1px solid", borderColor: "divider",
+                "&:last-child": { borderBottom: 0 },
+                opacity: item.is_complete ? 0.6 : 1,
               }}
             >
-              <Box sx={{ width: 4, height: 28, bgcolor: phaseColor, borderRadius: 1, flexShrink: 0 }} />
-              <Box sx={{ flex: 1 }}>
-                <Typography sx={{ fontWeight: 700, fontSize: "0.88rem" }}>
-                  {PHASE_LABELS[phase.phase]}
-                </Typography>
-                <Typography sx={{ fontSize: "0.72rem", color: "#888" }}>
-                  {fmtRange(phase.estimate_low, phase.estimate_high)} estimated · {fmt(phase.raised)} raised ({phasePct}%)
-                </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
+                {item.is_complete && <CheckCircleIcon fontSize="small" color="success" />}
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: item.is_complete ? 400 : 500 }}>
+                    {item.description}
+                    {item.location && (
+                      <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                        {item.location}
+                      </Typography>
+                    )}
+                  </Typography>
+                  {item.notes && (
+                    <Typography variant="caption" color="text.secondary">{item.notes}</Typography>
+                  )}
+                </Box>
               </Box>
-              <Box sx={{ minWidth: 140, display: "flex", alignItems: "center", gap: 1.5 }}>
-                <LinearProgress
-                  variant="determinate" value={phasePct}
-                  sx={{ flex: 1, height: 6, borderRadius: 3, bgcolor: "#e4e4e7", "& .MuiLinearProgress-bar": { bgcolor: phaseColor, borderRadius: 3 } }}
-                />
-                <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: phaseColor, flexShrink: 0, minWidth: 32 }}>
-                  {phasePct}%
+              <Box sx={{ textAlign: "right", ml: 2 }}>
+                <Typography variant="body2">
+                  {item.quoted_price != null
+                    ? <><strong>{fmt(item.quoted_price)}</strong> <Typography component="span" variant="caption" color="text.secondary">quoted</Typography></>
+                    : `${fmt(item.estimate_low)}–${fmt(item.estimate_high)}`
+                  }
                 </Typography>
+                {item.raised > 0 && (
+                  <Typography variant="caption" color="success.main">{fmt(item.raised)} raised</Typography>
+                )}
               </Box>
-              {isExpanded ? <ExpandLessIcon sx={{ fontSize: 18, color: "#aaa", flexShrink: 0 }} /> : <ExpandMoreIcon sx={{ fontSize: 18, color: "#aaa", flexShrink: 0 }} />}
             </Box>
-
-            {/* Line items */}
-            {isExpanded && (
-              <Box>
-                {phase.items.map((item, idx) => {
-                  const itemPct = pct(item.raised, item.estimate_low, item.estimate_high)
-                  const cat = CAT_CONFIG[item.category] ?? CAT_CONFIG.INFRA
-                  return (
-                    <Box key={item.id} sx={{
-                      display: "grid", gridTemplateColumns: "1fr 90px 120px 180px",
-                      gap: 2, px: 2, py: 1.25, alignItems: "center",
-                      bgcolor: idx % 2 === 0 ? "#fff" : "#fafafa",
-                      borderBottom: idx < phase.items.length - 1 ? "1px solid #f0f0f0" : "none",
-                    }}>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
-                        {item.is_complete && <CheckCircleIcon sx={{ fontSize: 14, color: "#2e7d32", flexShrink: 0 }} />}
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography sx={{ fontSize: "0.82rem", fontWeight: 600, color: item.is_complete ? "#888" : "#111", textDecoration: item.is_complete ? "line-through" : "none" }} noWrap>
-                            {item.description}
-                          </Typography>
-                          <Typography sx={{ fontSize: "0.68rem", color: "#aaa" }}>{item.location}</Typography>
-                        </Box>
-                      </Box>
-                      <Chip
-                        label={cat.label} size="small"
-                        sx={{ height: 18, fontSize: "0.63rem", fontWeight: 700, bgcolor: cat.bg, color: cat.color, "& .MuiChip-label": { px: 1 } }}
-                      />
-                      <Box sx={{ textAlign: "right" }}>
-                        <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: item.raised > 0 ? "#2e7d32" : "#111" }}>
-                          {fmt(item.raised)}
-                        </Typography>
-                        <Typography sx={{ fontSize: "0.65rem", color: "#aaa" }}>
-                          of {fmtRange(item.estimate_low, item.estimate_high)}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <LinearProgress
-                          variant="determinate" value={itemPct}
-                          sx={{ flex: 1, height: 4, borderRadius: 2, bgcolor: "#e4e4e7", "& .MuiLinearProgress-bar": { bgcolor: item.raised > 0 ? "#2e7d32" : "#ddd", borderRadius: 2 } }}
-                        />
-                        <Typography sx={{ fontSize: "0.65rem", color: "#aaa", flexShrink: 0, minWidth: 28 }}>{itemPct}%</Typography>
-                      </Box>
-                    </Box>
-                  )
-                })}
-              </Box>
-            )}
-          </Paper>
-        )
-      })}
+          ))}
+        </Box>
+      </Collapse>
     </Box>
   )
 }
 
-// ── Deposit Dialog ────────────────────────────────────────────────────────────
-
-interface DepositDialogProps {
-  open: boolean
-  campaignId: number
-  lineItems: LineItem[]
-  deposit?: Deposit | null
-  onClose: () => void
-  onSaved: (d: Deposit) => void
+function FlatItemList({ items }: { items: FundraisingItem[] }) {
+  return (
+    <Box>
+      {items.map(item => (
+        <Box
+          key={item.id}
+          sx={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            py: 0.75, borderBottom: "1px solid", borderColor: "divider",
+            "&:last-child": { borderBottom: 0 },
+            opacity: item.is_complete ? 0.6 : 1,
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
+            {item.is_complete && <CheckCircleIcon fontSize="small" color="success" />}
+            <Typography variant="body2" sx={{ fontWeight: item.is_complete ? 400 : 500 }}>
+              {item.description}
+              {item.location && (
+                <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  {item.location}
+                </Typography>
+              )}
+            </Typography>
+          </Box>
+          <Typography variant="body2" sx={{ ml: 2, textAlign: "right" }}>
+            {item.quoted_price != null
+              ? fmt(item.quoted_price)
+              : `${fmt(item.estimate_low)}–${fmt(item.estimate_high)}`
+            }
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  )
 }
 
-function DepositDialog({ open, campaignId, lineItems, deposit, onClose, onSaved }: DepositDialogProps) {
-  const [amount, setAmount] = useState("")
-  const [date, setDate] = useState("")
-  const [notes, setNotes] = useState("")
-  const [lineItemId, setLineItemId] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+function FeaturedPlanView({ plan }: { plan: PlanSummary }) {
+  const [locationFilter, setLocationFilter] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (open) {
-      setAmount(deposit ? String(deposit.amount) : "")
-      setDate(deposit ? deposit.date : new Date().toISOString().slice(0, 10))
-      setNotes(deposit?.notes ?? "")
-      setLineItemId(deposit?.line_item_id ?? null)
-      setSaving(false)
-      setError(null)
+  const allItems: FundraisingItem[] = useMemo(() => {
+    if (plan.uses_phases) {
+      return (plan.structure as PhaseGroup[]).flatMap(pg => pg.items)
     }
-  }, [open, deposit])
+    return plan.structure as FundraisingItem[]
+  }, [plan])
 
-  const handleSave = async () => {
-    if (!amount || !date) { setError("Amount and date are required."); return }
-    setSaving(true); setError(null)
-    try {
-      let res
-      if (deposit) {
-        res = await client.patch(`/fundraising/deposits/${deposit.id}/`, { amount: parseFloat(amount), date, notes, line_item_id: lineItemId })
-      } else {
-        res = await client.post(`/fundraising/campaigns/${campaignId}/deposits/`, { amount: parseFloat(amount), date, notes, line_item_id: lineItemId })
-      }
-      onSaved(res.data)
-      onClose()
-    } catch {
-      setError("Failed to save deposit.")
-    } finally {
-      setSaving(false)
-    }
+  const locations = useMemo(() => {
+    const set = new Set(allItems.map(i => i.location).filter(Boolean))
+    return Array.from(set).sort()
+  }, [allItems])
+
+  const pct = plan.estimate_high > 0
+    ? Math.min(100, (plan.raised / plan.estimate_high) * 100)
+    : 0
+
+  const filterItems = (items: FundraisingItem[]) =>
+    locationFilter ? items.filter(i => i.location === locationFilter) : items
+
+  const filteredItems = filterItems(allItems)
+  const hasFiltered = locationFilter !== null
+  const hasQuotes   = filteredItems.some(i => i.quoted_price != null)
+  const filteredEstLow  = filteredItems.reduce((s, i) => s + i.estimate_low, 0)
+  const filteredEstHigh = filteredItems.reduce((s, i) => s + i.estimate_high, 0)
+  const filteredQtdLow  = filteredItems.reduce((s, i) => s + (i.quoted_price ?? i.estimate_low), 0)
+  const filteredQtdHigh = filteredItems.reduce((s, i) => s + (i.quoted_price ?? i.estimate_high), 0)
+  const filteredRaised  = filteredItems.reduce((s, i) => s + i.raised, 0)
+
+  return (
+    <Box>
+      <Box sx={{ borderLeft: `6px solid ${plan.color}`, pl: 2, mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>{plan.name}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {fmt(plan.raised)} raised of {fmt(plan.estimate_high)} estimated
+        </Typography>
+        <LinearProgress
+          variant="determinate"
+          value={pct}
+          sx={{ mt: 1, height: 8, borderRadius: 4,
+            "& .MuiLinearProgress-bar": { bgcolor: plan.color } }}
+        />
+      </Box>
+
+      <Box sx={{ display: "flex", gap: 3, mb: 2, flexWrap: "wrap" }}>
+        <Box>
+          <Typography variant="caption" color="text.secondary">Estimate Range</Typography>
+          <Typography variant="subtitle2">
+            {hasFiltered
+              ? `${fmt(filteredEstLow)}–${fmt(filteredEstHigh)}`
+              : `${fmt(plan.estimate_low)}–${fmt(plan.estimate_high)}`}
+          </Typography>
+        </Box>
+        {(hasFiltered ? hasQuotes : plan.has_quotes) && (
+          <Box>
+            <Typography variant="caption" color="text.secondary">Quoted Range</Typography>
+            <Typography variant="subtitle2">
+              {hasFiltered
+                ? `${fmt(filteredQtdLow)}–${fmt(filteredQtdHigh)}`
+                : `${fmt(plan.quoted_low)}–${fmt(plan.quoted_high)}`}
+            </Typography>
+          </Box>
+        )}
+        <Box>
+          <Typography variant="caption" color="text.secondary">Raised</Typography>
+          <Typography variant="subtitle2" color="success.main">
+            {fmt(hasFiltered ? filteredRaised : plan.raised)}
+          </Typography>
+        </Box>
+      </Box>
+
+      {locations.length > 0 && (
+        <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap", alignItems: "center" }}>
+          <FilterListIcon fontSize="small" color="action" />
+          <Chip
+            label="All"
+            size="small"
+            variant={locationFilter === null ? "filled" : "outlined"}
+            onClick={() => setLocationFilter(null)}
+            sx={{ fontWeight: locationFilter === null ? 600 : 400 }}
+          />
+          {locations.map(loc => (
+            <Chip
+              key={loc}
+              label={loc}
+              size="small"
+              variant={locationFilter === loc ? "filled" : "outlined"}
+              onClick={() => setLocationFilter(locationFilter === loc ? null : loc)}
+              sx={{ fontWeight: locationFilter === loc ? 600 : 400 }}
+            />
+          ))}
+        </Box>
+      )}
+
+      {plan.uses_phases ? (
+        (plan.structure as PhaseGroup[]).map(pg => {
+          const filtered = filterItems(pg.items)
+          if (filtered.length === 0) return null
+          const phEstLow  = filtered.reduce((s, i) => s + i.estimate_low, 0)
+          const phEstHigh = filtered.reduce((s, i) => s + i.estimate_high, 0)
+          const phQtdLow  = filtered.reduce((s, i) => s + (i.quoted_price ?? i.estimate_low), 0)
+          const phQtdHigh = filtered.reduce((s, i) => s + (i.quoted_price ?? i.estimate_high), 0)
+          const phHasQuotes = filtered.some(i => i.quoted_price != null)
+          return (
+            <PhaseSection
+              key={pg.phase}
+              phase={pg.phase}
+              filteredItems={filtered}
+              hasQuotes={phHasQuotes}
+              estimateLow={phEstLow}
+              estimateHigh={phEstHigh}
+              quotedLow={phQtdLow}
+              quotedHigh={phQtdHigh}
+            />
+          )
+        })
+      ) : (
+        <FlatItemList items={filterItems(plan.structure as FundraisingItem[])} />
+      )}
+    </Box>
+  )
+}
+
+function ProgressTab({ summary }: { summary: FundraisingSummary }) {
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
+
+  const activePlans = summary.plans
+  const featuredPlan = activePlans.find(p => p.id === selectedPlanId) ?? activePlans[0]
+  const otherPlans   = activePlans.filter(p => p.id !== featuredPlan?.id)
+
+  if (!featuredPlan) {
+    return (
+      <Box sx={{ p: 4, textAlign: "center" }}>
+        <Typography color="text.secondary">No active plans yet. Create one in the Plans tab.</Typography>
+      </Box>
+    )
   }
 
-  const lineItemOptions = lineItems.map(i => ({ id: i.id, label: `[P${i.phase}] ${i.location} — ${i.description}` }))
-  const selectedOption = lineItemOptions.find(o => o.id === lineItemId) ?? null
+  return (
+    <Box sx={{ p: 3 }}>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={otherPlans.length > 0 ? 7 : 12}>
+          <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
+            <FeaturedPlanView plan={featuredPlan} />
+          </Paper>
+        </Grid>
+
+        {otherPlans.length > 0 && (
+          <Grid item xs={12} md={5}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: "block", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Other Plans
+            </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              {otherPlans.map(plan => {
+                const pct = plan.estimate_high > 0
+                  ? Math.min(100, (plan.raised / plan.estimate_high) * 100)
+                  : 0
+                return (
+                  <Paper
+                    key={plan.id}
+                    variant="outlined"
+                    onClick={() => setSelectedPlanId(plan.id)}
+                    sx={{
+                      p: 2, borderRadius: 2, cursor: "pointer",
+                      borderLeft: `6px solid ${plan.color}`,
+                      transition: "box-shadow 0.15s",
+                      "&:hover": { boxShadow: 3 },
+                    }}
+                  >
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{plan.name}</Typography>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {fmt(plan.estimate_low)}–{fmt(plan.estimate_high)}
+                      </Typography>
+                      <Typography variant="caption" color="success.main">{fmt(plan.raised)} raised</Typography>
+                    </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={pct}
+                      sx={{ height: 5, borderRadius: 3,
+                        "& .MuiLinearProgress-bar": { bgcolor: plan.color } }}
+                    />
+                    {plan.has_quotes && (
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                        Quoted: {fmt(plan.quoted_low)}–{fmt(plan.quoted_high)}
+                      </Typography>
+                    )}
+                  </Paper>
+                )
+              })}
+            </Box>
+
+            <Paper variant="outlined" sx={{ p: 2, mt: 2, borderRadius: 2, bgcolor: "action.hover" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "0.7rem" }}>
+                Overall
+              </Typography>
+              <Box sx={{ mt: 0.5 }}>
+                <Typography variant="body2">
+                  <strong>{fmt(summary.grand_cash_raised)}</strong> total cash raised
+                </Typography>
+                {summary.grand_in_kind_count > 0 && (
+                  <Typography variant="body2" color="text.secondary">
+                    +{summary.grand_in_kind_count} in-kind contribution{summary.grand_in_kind_count !== 1 ? "s" : ""}
+                  </Typography>
+                )}
+                {summary.general_unallocated > 0 && (
+                  <Typography variant="caption" color="text.secondary">
+                    {fmt(summary.general_unallocated)} unallocated
+                  </Typography>
+                )}
+              </Box>
+            </Paper>
+          </Grid>
+        )}
+      </Grid>
+    </Box>
+  )
+}
+
+// ── Plans Tab ─────────────────────────────────────────────────────────────────
+
+function SortableItemRow({
+  item, planId, allPlans, onEdit, onDelete, onMove,
+}: {
+  item: FundraisingItem
+  planId: number
+  allPlans: Plan[]
+  onEdit: (item: FundraisingItem) => void
+  onDelete: (id: number) => void
+  onMove: (itemId: number, toPlanId: number) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `item-${item.id}` })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  }
+  const otherPlans = allPlans.filter(p => p.id !== planId)
+
+  return (
+    <Box
+      ref={setNodeRef}
+      style={style}
+      sx={{
+        display: "grid",
+        gridTemplateColumns: "24px 130px 1fr 100px 80px 80px 80px 110px",
+        gap: 1, alignItems: "center",
+        py: 0.75, px: 1,
+        borderBottom: "1px solid", borderColor: "divider",
+        "&:last-child": { borderBottom: 0 },
+        bgcolor: isDragging ? "action.selected" : "transparent",
+        "&:hover": { bgcolor: "action.hover" },
+      }}
+    >
+      <Box {...attributes} {...listeners} sx={{ cursor: "grab", color: "text.disabled", display: "flex", alignItems: "center" }}>
+        <DragIndicatorIcon fontSize="small" />
+      </Box>
+      <Typography variant="caption" color="text.secondary" noWrap>{item.location || "—"}</Typography>
+      <Typography variant="body2" noWrap>{item.description}</Typography>
+      <Typography variant="caption" color="text.secondary" noWrap>{CATEGORY_LABELS[item.category] ?? item.category}</Typography>
+      <Typography variant="caption" align="right">{fmt(item.estimate_low)}</Typography>
+      <Typography variant="caption" align="right">{fmt(item.estimate_high)}</Typography>
+      <Typography variant="caption" align="right" color={item.quoted_price != null ? "text.primary" : "text.disabled"}>
+        {item.quoted_price != null ? fmt(item.quoted_price) : "—"}
+      </Typography>
+      <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.25 }}>
+        {otherPlans.length > 0 && (
+          <Select
+            size="small"
+            value=""
+            displayEmpty
+            onChange={e => { if (e.target.value) onMove(item.id, Number(e.target.value)) }}
+            sx={{ fontSize: "0.65rem", height: 24, "& .MuiSelect-select": { py: 0, px: "4px !important" }, minWidth: 30 }}
+            renderValue={() => "↗"}
+          >
+            <MenuItem value="" disabled><em>Move to…</em></MenuItem>
+            {otherPlans.map(p => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
+          </Select>
+        )}
+        <Tooltip title="Edit">
+          <IconButton size="small" onClick={() => onEdit(item)}><EditIcon sx={{ fontSize: 14 }} /></IconButton>
+        </Tooltip>
+        <Tooltip title="Delete">
+          <IconButton size="small" color="error" onClick={() => onDelete(item.id)}><DeleteOutlineIcon sx={{ fontSize: 14 }} /></IconButton>
+        </Tooltip>
+      </Box>
+    </Box>
+  )
+}
+
+function PlanAccordion({
+  plan, items, allPlans, expanded, onToggle, onItemsChanged, onPlanEdit, onPlanDelete,
+}: {
+  plan: Plan
+  items: FundraisingItem[]
+  allPlans: Plan[]
+  expanded: boolean
+  onToggle: () => void
+  onItemsChanged: () => void
+  onPlanEdit: (plan: Plan) => void
+  onPlanDelete: (id: number) => void
+}) {
+  // Require 8px of movement before activating a drag — prevents a simple
+  // click on the handle from being treated as a drag gesture.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+  const sortedItems = [...items].sort((a, b) => a.sort_order - b.sort_order)
+  const ids = sortedItems.map(i => `item-${i.id}`)
+
+  const estLow  = items.reduce((s, i) => s + i.estimate_low, 0)
+  const estHigh = items.reduce((s, i) => s + i.estimate_high, 0)
+  const qtdLow  = items.reduce((s, i) => s + (i.quoted_price ?? i.estimate_low), 0)
+  const qtdHigh = items.reduce((s, i) => s + (i.quoted_price ?? i.estimate_high), 0)
+  const hasQuotes = items.some(i => i.quoted_price != null)
+
+  const [editItem, setEditItem] = useState<FundraisingItem | null>(null)
+  const [editOpen, setEditOpen]  = useState(false)
+  const [addOpen, setAddOpen]    = useState(false)
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const fromIdx = sortedItems.findIndex(i => `item-${i.id}` === active.id)
+    const toIdx   = sortedItems.findIndex(i => `item-${i.id}` === over.id)
+    if (fromIdx === -1 || toIdx === -1) return
+    const reordered = arrayMove(sortedItems, fromIdx, toIdx)
+    const updates = reordered.map((item, idx) => ({ id: item.id, sort_order: idx, plan_id: item.plan_id }))
+    try {
+      await client.patch("/fundraising/line-items/reorder/", updates)
+      onItemsChanged()
+    } catch (e) { console.error("Reorder failed", e) }
+  }
+
+  const handleMove = async (itemId: number, toPlanId: number) => {
+    try {
+      await client.patch(`/fundraising/line-items/${itemId}/`, { plan_id: toPlanId, sort_order: 0 })
+      onItemsChanged()
+    } catch (e) { console.error("Move failed", e) }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Delete this line item?")) return
+    try {
+      await client.delete(`/fundraising/line-items/${id}/`)
+      onItemsChanged()
+    } catch (e) { console.error("Delete failed", e) }
+  }
+
+  return (
+    <>
+      <Accordion
+        expanded={expanded}
+        onChange={onToggle}
+        sx={{ mb: 1, "&:before": { display: "none" } }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{ borderLeft: `5px solid ${plan.color}`, pl: 2 }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flex: 1, mr: 1, minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 600 }}>{plan.name}</Typography>
+            <Chip label={`${items.length}`} size="small" sx={{ height: 18, fontSize: "0.7rem" }} />
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, mr: 1, flexShrink: 0 }}>
+            <Typography variant="caption" color="text.secondary">
+              Est: {fmt(estLow)}–{fmt(estHigh)}
+            </Typography>
+            {hasQuotes && (
+              <Typography variant="caption" color="text.secondary">
+                Quoted: {fmt(qtdLow)}–{fmt(qtdHigh)}
+              </Typography>
+            )}
+            <Tooltip title="Edit plan">
+              <IconButton size="small" onClick={e => { e.stopPropagation(); onPlanEdit(plan) }}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete plan">
+              <IconButton size="small" color="error" onClick={e => { e.stopPropagation(); onPlanDelete(plan.id) }}>
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ p: 0 }}>
+          {/* Column headers */}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "24px 130px 1fr 100px 80px 80px 80px 110px",
+              gap: 1, px: 1, py: 0.5,
+              bgcolor: "action.hover",
+              borderBottom: "1px solid", borderColor: "divider",
+            }}
+          >
+            {["", "Location", "Description", "Category", "Est Low", "Est High", "Quoted", ""].map((h, i) => (
+              <Typography key={i} variant="caption" color="text.secondary" sx={{ fontWeight: 600 }} align={i >= 4 && i <= 6 ? "right" : "left"}>
+                {h}
+              </Typography>
+            ))}
+          </Box>
+
+          {/* Sortable rows */}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              {sortedItems.map(item => (
+                <SortableItemRow
+                  key={item.id}
+                  item={item}
+                  planId={plan.id}
+                  allPlans={allPlans}
+                  onEdit={i => { setEditItem(i); setEditOpen(true) }}
+                  onDelete={handleDelete}
+                  onMove={handleMove}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+
+          {items.length === 0 && (
+            <Box sx={{ p: 2, textAlign: "center" }}>
+              <Typography variant="body2" color="text.secondary">No items yet.</Typography>
+            </Box>
+          )}
+
+          {/* Subtotal footer */}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "24px 130px 1fr 100px 80px 80px 80px 110px",
+              gap: 1, px: 1, py: 1,
+              bgcolor: "action.hover",
+              borderTop: "1px solid", borderColor: "divider",
+            }}
+          >
+            {[null, null, null, null, estLow, estHigh, hasQuotes ? qtdHigh : null, null].map((v, i) => (
+              <Typography key={i} variant="caption" align={i >= 4 && i <= 6 ? "right" : "left"} sx={{ fontWeight: 600 }}>
+                {v != null ? fmt(v) : ""}
+              </Typography>
+            ))}
+          </Box>
+
+          <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
+            <Button size="small" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
+              Add Item to {plan.name}
+            </Button>
+          </Box>
+        </AccordionDetails>
+      </Accordion>
+
+      {editOpen && editItem && (
+        <ItemDialog
+          open
+          item={editItem}
+          usesPhases={plan.uses_phases}
+          onSave={async data => {
+            await client.patch(`/fundraising/line-items/${editItem.id}/`, data)
+            setEditOpen(false); onItemsChanged()
+          }}
+          onClose={() => setEditOpen(false)}
+        />
+      )}
+      {addOpen && (
+        <ItemDialog
+          open
+          item={null}
+          usesPhases={plan.uses_phases}
+          onSave={async data => {
+            await client.post("/fundraising/line-items/", { ...data, plan_id: plan.id })
+            setAddOpen(false); onItemsChanged()
+          }}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
+    </>
+  )
+}
+
+function ItemDialog({
+  open, item, usesPhases, onSave, onClose,
+}: {
+  open: boolean
+  item: FundraisingItem | null
+  usesPhases: boolean
+  onSave: (data: Record<string, unknown>) => Promise<void>
+  onClose: () => void
+}) {
+  const [form, setForm] = useState({
+    location:      item?.location ?? "",
+    description:   item?.description ?? "",
+    category:      item?.category ?? "INFRA",
+    phase:         item?.phase ?? 1,
+    estimate_low:  item?.estimate_low ?? 0,
+    estimate_high: item?.estimate_high ?? 0,
+    quoted_price:  item?.quoted_price != null ? String(item.quoted_price) : "",
+    notes:         item?.notes ?? "",
+    is_complete:   item?.is_complete ?? false,
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState("")
+
+  const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(prev => ({ ...prev, [field]: e.target.value }))
+
+  const handleSave = async () => {
+    if (!form.description.trim()) { setError("Description is required."); return }
+    setSaving(true); setError("")
+    try {
+      await onSave({
+        ...form,
+        phase:         usesPhases ? Number(form.phase) : null,
+        estimate_low:  Number(form.estimate_low),
+        estimate_high: Number(form.estimate_high),
+        quoted_price:  form.quoted_price !== "" ? Number(form.quoted_price) : null,
+      })
+    } catch { setError("Save failed."); setSaving(false) }
+  }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
-        <Typography fontWeight={700}>{deposit ? "Edit Deposit" : "Log Deposit"}</Typography>
-        <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
-      </DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}>
+      <DialogTitle>{item ? "Edit Item" : "Add Item"}</DialogTitle>
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}>
         {error && <Alert severity="error">{error}</Alert>}
-        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-          <TextField
-            label="Amount" size="small" required
-            value={amount} onChange={e => setAmount(e.target.value)}
-            type="number" inputProps={{ min: 0, step: "0.01" }}
-            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-          />
-          <TextField
-            label="Date" size="small" required type="date"
-            value={date} onChange={e => setDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-          />
-        </Box>
-        <Autocomplete
-          options={lineItemOptions}
-          value={selectedOption}
-          onChange={(_, v) => setLineItemId(v?.id ?? null)}
-          getOptionLabel={o => o.label}
-          renderInput={params => (
-            <TextField {...params} label="Earmark to project item (optional)" size="small"
-              placeholder="Leave blank for general fund" />
+        <TextField label="Location / Site" value={form.location} onChange={f("location")} size="small" fullWidth
+          helperText='e.g. "Diamond 8", "Concession Stand", "Parking Lot"' />
+        <TextField label="Description" value={form.description} onChange={f("description")} size="small" fullWidth required />
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <TextField select label="Category" value={form.category}
+            onChange={e => setForm(p => ({ ...p, category: e.target.value }))} size="small" sx={{ flex: 1 }}>
+            {Object.entries(CATEGORY_LABELS).map(([k, v]) => <MenuItem key={k} value={k}>{v}</MenuItem>)}
+          </TextField>
+          {usesPhases && (
+            <TextField select label="Phase" value={form.phase}
+              onChange={e => setForm(p => ({ ...p, phase: Number(e.target.value) }))} size="small" sx={{ width: 120 }}>
+              <MenuItem value={1}>Phase 1</MenuItem>
+              <MenuItem value={2}>Phase 2</MenuItem>
+              <MenuItem value={3}>Phase 3</MenuItem>
+            </TextField>
           )}
-          clearOnEscape
-        />
-        <TextField
-          label="Notes" size="small" multiline rows={2}
-          value={notes} onChange={e => setNotes(e.target.value)}
-          placeholder="Check number, donor type, source…"
+        </Box>
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <TextField label="Est. Low" value={form.estimate_low} onChange={f("estimate_low")}
+            size="small" type="number" InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} sx={{ flex: 1 }} />
+          <TextField label="Est. High" value={form.estimate_high} onChange={f("estimate_high")}
+            size="small" type="number" InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} sx={{ flex: 1 }} />
+          <TextField label="Quoted Price" value={form.quoted_price} onChange={f("quoted_price")}
+            size="small" type="number" InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+            helperText="Blank = not yet quoted" sx={{ flex: 1 }} />
+        </Box>
+        <TextField label="Notes" value={form.notes} onChange={f("notes")} size="small" fullWidth multiline rows={2} />
+        <FormControlLabel
+          control={<Switch checked={form.is_complete} onChange={e => setForm(p => ({ ...p, is_complete: e.target.checked }))} />}
+          label="Mark as complete"
         />
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} color="inherit">Cancel</Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}
-          startIcon={saving ? <CircularProgress size={14} color="inherit" /> : undefined}
-          sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a50e26" }, fontWeight: 700 }}>
-          {deposit ? "Save Changes" : "Log Deposit"}
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={handleSave} variant="contained" disabled={saving}>
+          {saving ? <CircularProgress size={16} /> : "Save"}
         </Button>
       </DialogActions>
     </Dialog>
   )
 }
 
-// ── Campaign Dialog ───────────────────────────────────────────────────────────
+function PlansTab({ plans, allItems, onRefresh }: { plans: Plan[]; allItems: FundraisingItem[]; onRefresh: () => void }) {
+  const [planDialogOpen, setPlanDialogOpen] = useState(false)
+  const [editPlan, setEditPlan] = useState<Plan | null>(null)
+  // Expanded state lives here so it survives data refreshes (re-fetches after drag/edit)
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+  const toggleExpanded = (id: number) =>
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
 
-interface CampaignDialogProps {
-  open: boolean
-  campaign?: Campaign | null
-  onClose: () => void
-  onSaved: (c: Campaign) => void
+  const handleDeletePlan = async (id: number) => {
+    const count = allItems.filter(i => i.plan_id === id).length
+    if (count > 0) { alert(`This plan has ${count} item(s). Move or delete them first.`); return }
+    if (!confirm("Delete this plan?")) return
+    try { await client.delete(`/fundraising/plans/${id}/`); onRefresh() }
+    catch (e) { console.error("Delete plan failed", e) }
+  }
+
+  return (
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+        <Button variant="contained" startIcon={<AddIcon />}
+          onClick={() => { setEditPlan(null); setPlanDialogOpen(true) }}
+          sx={{ bgcolor: "#2e7d32", "&:hover": { bgcolor: "#1b5e20" } }}>
+          Add Plan
+        </Button>
+      </Box>
+      {plans.map(plan => (
+        <PlanAccordion
+          key={plan.id}
+          plan={plan}
+          items={allItems.filter(i => i.plan_id === plan.id)}
+          allPlans={plans}
+          expanded={expandedIds.has(plan.id)}
+          onToggle={() => toggleExpanded(plan.id)}
+          onItemsChanged={onRefresh}
+          onPlanEdit={p => { setEditPlan(p); setPlanDialogOpen(true) }}
+          onPlanDelete={handleDeletePlan}
+        />
+      ))}
+      {plans.length === 0 && (
+        <Box sx={{ textAlign: "center", py: 8 }}>
+          <Typography color="text.secondary">No plans yet. Click "Add Plan" to get started.</Typography>
+        </Box>
+      )}
+      {planDialogOpen && (
+        <PlanDialog
+          open
+          plan={editPlan}
+          onSave={async data => {
+            if (editPlan) await client.patch(`/fundraising/plans/${editPlan.id}/`, data)
+            else await client.post("/fundraising/plans/", data)
+            setPlanDialogOpen(false); onRefresh()
+          }}
+          onClose={() => setPlanDialogOpen(false)}
+        />
+      )}
+    </Box>
+  )
 }
 
-function CampaignDialog({ open, campaign, onClose, onSaved }: CampaignDialogProps) {
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [goal, setGoal] = useState("")
-  const [isActive, setIsActive] = useState(true)
+function PlanDialog({
+  open, plan, onSave, onClose,
+}: {
+  open: boolean
+  plan: Plan | null
+  onSave: (data: Partial<Plan>) => Promise<void>
+  onClose: () => void
+}) {
+  const [form, setForm] = useState({
+    name:        plan?.name ?? "",
+    description: plan?.description ?? "",
+    uses_phases: plan?.uses_phases ?? false,
+    color:       plan?.color ?? "",
+    is_active:   plan?.is_active ?? true,
+  })
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError]   = useState("")
 
-  useEffect(() => {
-    if (open) {
-      setName(campaign?.name ?? "")
-      setDescription(campaign?.description ?? "")
-      setGoal(campaign?.goal != null ? String(campaign.goal) : "")
-      setIsActive(campaign?.is_active ?? true)
-      setSaving(false)
-      setError(null)
-    }
-  }, [open, campaign])
+  const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(prev => ({ ...prev, [field]: e.target.value }))
 
   const handleSave = async () => {
-    if (!name.trim()) { setError("Name is required."); return }
-    setSaving(true); setError(null)
-    const payload = { name: name.trim(), description, goal: goal ? parseFloat(goal) : null, is_active: isActive }
-    try {
-      let res
-      if (campaign) {
-        res = await client.patch(`/fundraising/campaigns/${campaign.id}/`, payload)
-      } else {
-        res = await client.post("/fundraising/campaigns/", payload)
-      }
-      onSaved(res.data)
-      onClose()
-    } catch {
-      setError("Failed to save campaign.")
-    } finally {
-      setSaving(false)
-    }
+    if (!form.name.trim()) { setError("Plan name is required."); return }
+    setSaving(true)
+    try { await onSave(form) }
+    catch { setError("Save failed."); setSaving(false) }
   }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
-        <Typography fontWeight={700}>{campaign ? "Edit Campaign" : "New Campaign"}</Typography>
-        <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
-      </DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}>
+      <DialogTitle>{plan ? "Edit Plan" : "New Fundraising Plan"}</DialogTitle>
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}>
         {error && <Alert severity="error">{error}</Alert>}
-        <TextField label="Campaign Name" size="small" required fullWidth value={name} onChange={e => setName(e.target.value)} placeholder='e.g. "2026 Raffle Night"' />
-        <TextField label="Description" size="small" fullWidth multiline rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="What this campaign is about…" />
-        <TextField label="Campaign Goal (optional)" size="small" type="number" inputProps={{ min: 0 }}
-          value={goal} onChange={e => setGoal(e.target.value)}
-          InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-          helperText="Optional target just for this campaign" />
+        <TextField label="Plan Name" value={form.name} onChange={f("name")} size="small" fullWidth required />
+        <TextField label="Description" value={form.description} onChange={f("description")} size="small" fullWidth multiline rows={2} />
+        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+          <TextField
+            label="Color"
+            value={form.color}
+            onChange={f("color")}
+            size="small"
+            sx={{ flex: 1 }}
+            placeholder="Leave blank for auto-assign"
+            helperText="Hex code e.g. #C41230"
+            InputProps={{
+              startAdornment: form.color ? (
+                <InputAdornment position="start">
+                  <Box sx={{ width: 16, height: 16, borderRadius: "50%", bgcolor: form.color, border: "1px solid rgba(0,0,0,0.2)" }} />
+                </InputAdornment>
+              ) : undefined,
+            }}
+          />
+          <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", maxWidth: 180, pt: 0.5 }}>
+            {PLAN_COLOR_PALETTE.map(c => (
+              <Box
+                key={c}
+                onClick={() => setForm(p => ({ ...p, color: c }))}
+                sx={{
+                  width: 22, height: 22, borderRadius: "50%", bgcolor: c, cursor: "pointer",
+                  border: form.color === c ? "3px solid" : "2px solid transparent",
+                  borderColor: form.color === c ? "text.primary" : "transparent",
+                  transition: "border-color 0.15s",
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
         <FormControlLabel
-          control={<Switch checked={isActive} onChange={e => setIsActive(e.target.checked)} />}
-          label={<Typography sx={{ fontSize: "0.85rem" }}>Active (visible in campaign list)</Typography>}
+          control={<Switch checked={form.uses_phases} onChange={e => setForm(p => ({ ...p, uses_phases: e.target.checked }))} />}
+          label="Organize items into phases (Phase 1, 2, 3)"
+        />
+        <FormControlLabel
+          control={<Switch checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} />}
+          label="Active (visible on Progress tab)"
         />
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} color="inherit">Cancel</Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}
-          startIcon={saving ? <CircularProgress size={14} color="inherit" /> : undefined}
-          sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a50e26" }, fontWeight: 700 }}>
-          {campaign ? "Save Changes" : "Create Campaign"}
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={handleSave} variant="contained" disabled={saving}>
+          {saving ? <CircularProgress size={16} /> : "Save"}
         </Button>
       </DialogActions>
     </Dialog>
@@ -431,472 +994,351 @@ function CampaignDialog({ open, campaign, onClose, onSaved }: CampaignDialogProp
 
 // ── Campaigns Tab ─────────────────────────────────────────────────────────────
 
-function CampaignsTab({ lineItems }: { lineItems: LineItem[] }) {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [deposits, setDeposits] = useState<Record<number, Deposit[]>>({})
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [campaignDialog, setCampaignDialog] = useState(false)
-  const [editCampaign, setEditCampaign] = useState<Campaign | null>(null)
-  const [depositDialog, setDepositDialog] = useState<{ campaignId: number; deposit?: Deposit } | null>(null)
+function CampaignCard({
+  campaign, allItems, onEdit, onDelete,
+}: {
+  campaign: Campaign
+  allItems: FundraisingItem[]
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const [depositsOpen, setDepositsOpen]         = useState(false)
+  const [deposits, setDeposits]                 = useState<Deposit[]>([])
+  const [loadingDeps, setLoadingDeps]           = useState(false)
+  const [depositDialogOpen, setDepositDialogOpen] = useState(false)
 
-  useEffect(() => {
-    client.get("/fundraising/campaigns/")
-      .then(r => setCampaigns(r.data ?? []))
-      .catch(() => setError("Failed to load campaigns."))
-      .finally(() => setLoading(false))
-  }, [])
+  const loadDeposits = useCallback(async () => {
+    setLoadingDeps(true)
+    try {
+      const res = await client.get(`/fundraising/campaigns/${campaign.id}/deposits/`)
+      setDeposits(res.data)
+    } finally { setLoadingDeps(false) }
+  }, [campaign.id])
 
-  const loadDeposits = async (campaignId: number) => {
-    if (deposits[campaignId]) return
-    const res = await client.get(`/fundraising/campaigns/${campaignId}/deposits/`)
-    setDeposits(d => ({ ...d, [campaignId]: res.data ?? [] }))
+  const toggleDeposits = () => {
+    if (!depositsOpen) loadDeposits()
+    setDepositsOpen(o => !o)
   }
 
-  const toggleExpand = async (id: number) => {
-    const next = !expanded[id]
-    setExpanded(e => ({ ...e, [id]: next }))
-    if (next) await loadDeposits(id)
-  }
-
-  const handleCampaignSaved = (c: Campaign) => {
-    setCampaigns(prev => {
-      const idx = prev.findIndex(x => x.id === c.id)
-      if (idx >= 0) { const n = [...prev]; n[idx] = c; return n }
-      return [c, ...prev]
-    })
-  }
-
-  const handleDepositSaved = (d: Deposit) => {
-    setDeposits(prev => {
-      const list = prev[d.campaign_id] ?? []
-      const idx = list.findIndex(x => x.id === d.id)
-      const next = idx >= 0 ? list.map(x => x.id === d.id ? d : x) : [d, ...list]
-      return { ...prev, [d.campaign_id]: next }
-    })
-    setCampaigns(prev => prev.map(c => {
-      if (c.id !== d.campaign_id) return c
-      const deps = deposits[d.campaign_id] ?? []
-      const old = deps.find(x => x.id === d.id)
-      const diff = d.amount - (old?.amount ?? 0)
-      return { ...c, total_raised: c.total_raised + diff }
-    }))
-  }
-
-  const deleteDeposit = async (dep: Deposit) => {
-    if (!confirm("Delete this deposit?")) return
-    await client.delete(`/fundraising/deposits/${dep.id}/`)
-    setDeposits(prev => ({ ...prev, [dep.campaign_id]: (prev[dep.campaign_id] ?? []).filter(x => x.id !== dep.id) }))
-    setCampaigns(prev => prev.map(c => c.id === dep.campaign_id ? { ...c, total_raised: c.total_raised - dep.amount } : c))
-  }
-
-  if (loading) return <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>
-  if (error) return <Alert severity="error">{error}</Alert>
+  const pct = campaign.goal ? Math.min(100, (campaign.total_raised / campaign.goal) * 100) : null
+  const typeInfo = CAMPAIGN_TYPES[campaign.campaign_type] ?? CAMPAIGN_TYPES.OTHER
 
   return (
-    <Box sx={{ maxWidth: 820 }}>
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
-        <Button variant="contained" startIcon={<AddIcon />}
-          onClick={() => { setEditCampaign(null); setCampaignDialog(true) }}
-          sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a50e26" }, fontWeight: 700 }}>
-          New Campaign
+    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", mb: 2 }}>
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{campaign.name}</Typography>
+              <Chip label={typeInfo.label} color={typeInfo.color} size="small" variant="outlined" />
+              {!campaign.is_active && <Chip label="Inactive" size="small" />}
+            </Box>
+            {campaign.description && (
+              <Typography variant="body2" color="text.secondary">{campaign.description}</Typography>
+            )}
+          </Box>
+          <Box sx={{ display: "flex", gap: 0.5, flexShrink: 0 }}>
+            <Tooltip title="Edit"><IconButton size="small" onClick={onEdit}><EditIcon fontSize="small" /></IconButton></Tooltip>
+            <Tooltip title="Delete"><IconButton size="small" color="error" onClick={onDelete}><DeleteOutlineIcon fontSize="small" /></IconButton></Tooltip>
+          </Box>
+        </Box>
+        <Box sx={{ display: "flex", gap: 3, mt: 1.5, flexWrap: "wrap" }}>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Cash Raised</Typography>
+            <Typography variant="subtitle2" color="success.main">{fmt(campaign.total_raised)}</Typography>
+          </Box>
+          {campaign.goal && (
+            <Box>
+              <Typography variant="caption" color="text.secondary">Goal</Typography>
+              <Typography variant="subtitle2">{fmt(campaign.goal)}</Typography>
+            </Box>
+          )}
+          {campaign.in_kind_count > 0 && (
+            <Box>
+              <Typography variant="caption" color="text.secondary">In-Kind</Typography>
+              <Typography variant="subtitle2">{campaign.in_kind_count} contribution{campaign.in_kind_count !== 1 ? "s" : ""}</Typography>
+            </Box>
+          )}
+        </Box>
+        {pct !== null && (
+          <LinearProgress variant="determinate" value={pct}
+            sx={{ mt: 1.5, height: 5, borderRadius: 3, "& .MuiLinearProgress-bar": { bgcolor: "#2e7d32" } }} />
+        )}
+      </Box>
+      <Divider />
+      <Box sx={{ display: "flex", px: 2, py: 0.5, cursor: "pointer", alignItems: "center",
+        "&:hover": { bgcolor: "action.hover" } }} onClick={toggleDeposits}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
+          {depositsOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+          <Typography variant="caption" color="text.secondary">Deposits ({deposits.length})</Typography>
+        </Box>
+        <Button size="small" startIcon={<AddIcon />}
+          onClick={e => { e.stopPropagation(); if (!depositsOpen) { setDepositsOpen(true); loadDeposits() } setDepositDialogOpen(true) }}>
+          Add
         </Button>
       </Box>
-
-      {campaigns.length === 0 && (
-        <Box sx={{ py: 6, textAlign: "center" }}>
-          <Typography sx={{ color: "#aaa", fontSize: "0.88rem" }}>No campaigns yet — create one to start logging deposits.</Typography>
-        </Box>
-      )}
-
-      {campaigns.map(campaign => {
-        const isExpanded = expanded[campaign.id] ?? false
-        const deps = deposits[campaign.id] ?? []
-        const goalPct = campaign.goal ? Math.min(100, Math.round((campaign.total_raised / campaign.goal) * 100)) : null
-
-        return (
-          <Paper key={campaign.id} variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", mb: 2 }}>
-            {/* Campaign header */}
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, px: 2, py: 1.5, bgcolor: "#f9fafb", borderBottom: isExpanded ? "1px solid #e4e4e7" : "none" }}>
-              <Box sx={{ flex: 1 }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                  <Typography sx={{ fontWeight: 700, fontSize: "0.9rem" }}>{campaign.name}</Typography>
-                  <Chip
-                    label={campaign.is_active ? "Active" : "Closed"} size="small"
-                    sx={{ height: 18, fontSize: "0.63rem", fontWeight: 700,
-                      bgcolor: campaign.is_active ? "#e8f5e9" : "#f5f5f5",
-                      color: campaign.is_active ? "#2e7d32" : "#aaa",
-                      "& .MuiChip-label": { px: 1 } }}
-                  />
-                </Box>
-                {campaign.description && (
-                  <Typography sx={{ fontSize: "0.72rem", color: "#888", mt: 0.25 }}>{campaign.description}</Typography>
-                )}
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 0.5, flexWrap: "wrap" }}>
-                  <Typography sx={{ fontFamily: "Georgia, serif", fontSize: "1.1rem", fontWeight: 700, color: RED }}>
-                    {fmt(campaign.total_raised)}
+      <Collapse in={depositsOpen}>
+        <Box sx={{ px: 2, pb: 1 }}>
+          {loadingDeps ? (
+            <CircularProgress size={16} sx={{ m: 1 }} />
+          ) : deposits.length === 0 ? (
+            <Typography variant="caption" color="text.secondary">No deposits yet.</Typography>
+          ) : (
+            deposits.map(dep => (
+              <Box key={dep.id} sx={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                py: 0.5, borderBottom: "1px solid", borderColor: "divider", "&:last-child": { borderBottom: 0 },
+              }}>
+                <Box>
+                  <Typography variant="body2">
+                    {dep.is_in_kind
+                      ? <><strong>In-Kind</strong> — {dep.in_kind_description || "contribution"}</>
+                      : fmt(dep.amount)
+                    }
+                    {dep.line_item_label && (
+                      <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                        → {dep.line_item_label}
+                      </Typography>
+                    )}
                   </Typography>
-                  {campaign.goal && (
-                    <Typography sx={{ fontSize: "0.72rem", color: "#888" }}>
-                      of {fmt(campaign.goal)} goal ({goalPct}%)
-                    </Typography>
-                  )}
+                  <Typography variant="caption" color="text.secondary">
+                    {dep.date}{dep.notes ? ` · ${dep.notes}` : ""}
+                  </Typography>
                 </Box>
-                {campaign.goal && goalPct !== null && (
-                  <LinearProgress variant="determinate" value={goalPct}
-                    sx={{ mt: 0.75, height: 4, borderRadius: 2, bgcolor: "#e4e4e7", maxWidth: 260,
-                      "& .MuiLinearProgress-bar": { bgcolor: RED, borderRadius: 2 } }} />
-                )}
-              </Box>
-              <Box sx={{ display: "flex", gap: 0.5, flexShrink: 0 }}>
-                <Tooltip title="Log Deposit">
-                  <IconButton size="small" onClick={() => setDepositDialog({ campaignId: campaign.id })}
-                    sx={{ bgcolor: RED, color: "#fff", "&:hover": { bgcolor: "#a50e26" }, width: 28, height: 28 }}>
-                    <AddIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Edit Campaign">
-                  <IconButton size="small" onClick={() => { setEditCampaign(campaign); setCampaignDialog(true) }}>
-                    <EditIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-                <IconButton size="small" onClick={() => toggleExpand(campaign.id)}>
-                  {isExpanded ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
+                <IconButton size="small" color="error" onClick={async () => {
+                  if (!confirm("Delete this deposit?")) return
+                  await client.delete(`/fundraising/deposits/${dep.id}/`)
+                  loadDeposits()
+                }}>
+                  <CloseIcon fontSize="small" />
                 </IconButton>
               </Box>
-            </Box>
-
-            {/* Deposits list */}
-            {isExpanded && (
-              <Box>
-                {deps.length === 0 && (
-                  <Box sx={{ py: 3, textAlign: "center" }}>
-                    <Typography sx={{ color: "#bbb", fontSize: "0.8rem" }}>No deposits yet.</Typography>
-                  </Box>
-                )}
-                {deps.map((dep, idx) => (
-                  <Box key={dep.id} sx={{
-                    display: "grid", gridTemplateColumns: "100px 1fr 100px 32px 32px",
-                    gap: 1.5, px: 2, py: 1, alignItems: "center",
-                    bgcolor: idx % 2 === 0 ? "#fff" : "#fafafa",
-                    borderBottom: idx < deps.length - 1 ? "1px solid #f0f0f0" : "none",
-                  }}>
-                    <Typography sx={{ fontSize: "0.78rem", color: "#888" }}>{dep.date}</Typography>
-                    <Box>
-                      {dep.line_item_label ? (
-                        <Typography sx={{ fontSize: "0.78rem", fontWeight: 600 }}>{dep.line_item_label}</Typography>
-                      ) : (
-                        <Typography sx={{ fontSize: "0.78rem", color: "#aaa", fontStyle: "italic" }}>General fund</Typography>
-                      )}
-                      {dep.notes && <Typography sx={{ fontSize: "0.68rem", color: "#aaa" }}>{dep.notes}</Typography>}
-                    </Box>
-                    <Typography sx={{ fontSize: "0.88rem", fontWeight: 700, textAlign: "right" }}>{fmt(dep.amount)}</Typography>
-                    <IconButton size="small" onClick={() => setDepositDialog({ campaignId: campaign.id, deposit: dep })}>
-                      <EditIcon sx={{ fontSize: 14 }} />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => deleteDeposit(dep)} sx={{ color: "#e53e3e" }}>
-                      <DeleteOutlineIcon sx={{ fontSize: 14 }} />
-                    </IconButton>
-                  </Box>
-                ))}
-                {/* Add row at bottom */}
-                <Box sx={{ px: 2, py: 1.5, bgcolor: "#f9fafb", borderTop: "1px solid #f0f0f0" }}>
-                  <Button size="small" startIcon={<AddIcon />}
-                    onClick={() => setDepositDialog({ campaignId: campaign.id })}
-                    sx={{ fontSize: "0.75rem", color: "#888" }}>
-                    Log deposit
-                  </Button>
-                </Box>
-              </Box>
-            )}
-          </Paper>
-        )
-      })}
-
-      <CampaignDialog
-        open={campaignDialog}
-        campaign={editCampaign}
-        onClose={() => setCampaignDialog(false)}
-        onSaved={handleCampaignSaved}
-      />
-      {depositDialog && (
+            ))
+          )}
+        </Box>
+      </Collapse>
+      {depositDialogOpen && (
         <DepositDialog
-          open={!!depositDialog}
-          campaignId={depositDialog.campaignId}
-          lineItems={lineItems}
-          deposit={depositDialog.deposit}
-          onClose={() => setDepositDialog(null)}
-          onSaved={handleDepositSaved}
+          open
+          campaignId={campaign.id}
+          allItems={allItems}
+          onSave={async data => {
+            await client.post(`/fundraising/campaigns/${campaign.id}/deposits/`, data)
+            setDepositDialogOpen(false); loadDeposits()
+          }}
+          onClose={() => setDepositDialogOpen(false)}
         />
       )}
-    </Box>
+    </Paper>
   )
 }
 
-// ── Line Item Row (editable) ───────────────────────────────────────────────────
-
-function LineItemRow({ item, onUpdated, onDeleted }: {
-  item: LineItem
-  onUpdated: (i: LineItem) => void
-  onDeleted: (id: number) => void
+function DepositDialog({
+  open, campaignId, allItems, onSave, onClose,
+}: {
+  open: boolean
+  campaignId: number
+  allItems: FundraisingItem[]
+  onSave: (data: Record<string, unknown>) => Promise<void>
+  onClose: () => void
 }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<LineItem>(item)
+  const [form, setForm] = useState({
+    amount:              "",
+    date:                new Date().toISOString().split("T")[0],
+    notes:               "",
+    line_item_id:        "" as string | number,
+    is_in_kind:          false,
+    in_kind_description: "",
+  })
   const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState("")
 
-  useEffect(() => { setDraft(item) }, [item])
-
-  const set = (k: keyof LineItem) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setDraft(d => ({ ...d, [k]: e.target.value }))
-
-  const save = async () => {
+  const handleSave = async () => {
+    if (!form.is_in_kind && (!form.amount || isNaN(Number(form.amount)))) {
+      setError("Amount is required for cash deposits."); return
+    }
     setSaving(true)
     try {
-      const res = await client.patch(`/fundraising/line-items/${item.id}/`, {
-        location: draft.location,
-        description: draft.description,
-        category: draft.category,
-        estimate_low: parseFloat(String(draft.estimate_low)),
-        estimate_high: parseFloat(String(draft.estimate_high)),
-        notes: draft.notes,
-        sort_order: draft.sort_order,
-        is_complete: draft.is_complete,
+      await onSave({
+        amount:              form.is_in_kind ? 0 : Number(form.amount),
+        date:                form.date,
+        notes:               form.notes,
+        line_item_id:        form.line_item_id !== "" ? Number(form.line_item_id) : null,
+        is_in_kind:          form.is_in_kind,
+        in_kind_description: form.in_kind_description,
       })
-      onUpdated(res.data)
-      setEditing(false)
-    } catch {
-      /* keep editing open */
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const del = async () => {
-    if (!confirm(`Delete "${item.description}"? Any deposits earmarked to this item will become unallocated.`)) return
-    await client.delete(`/fundraising/line-items/${item.id}/`)
-    onDeleted(item.id)
-  }
-
-  const cat = CAT_CONFIG[item.category] ?? CAT_CONFIG.INFRA
-
-  if (!editing) {
-    return (
-      <Box sx={{
-        display: "grid", gridTemplateColumns: "1fr 90px 80px 80px 32px 32px",
-        gap: 1.5, px: 2, py: 1.25, alignItems: "center",
-      }}>
-        <Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography sx={{ fontSize: "0.82rem", fontWeight: 600 }}>{item.description}</Typography>
-            {item.is_complete && <CheckCircleIcon sx={{ fontSize: 14, color: "#2e7d32" }} />}
-          </Box>
-          {item.notes && <Typography sx={{ fontSize: "0.68rem", color: "#aaa" }}>{item.notes}</Typography>}
-        </Box>
-        <Chip label={cat.label} size="small"
-          sx={{ height: 18, fontSize: "0.63rem", fontWeight: 700, bgcolor: cat.bg, color: cat.color, "& .MuiChip-label": { px: 1 } }} />
-        <Typography sx={{ fontSize: "0.78rem", textAlign: "right", color: "#555" }}>{fmt(item.estimate_low)}</Typography>
-        <Typography sx={{ fontSize: "0.78rem", textAlign: "right", color: "#555" }}>{fmt(item.estimate_high)}</Typography>
-        <IconButton size="small" onClick={() => setEditing(true)}><EditIcon sx={{ fontSize: 14 }} /></IconButton>
-        <IconButton size="small" sx={{ color: "#e53e3e" }} onClick={del}><DeleteOutlineIcon sx={{ fontSize: 14 }} /></IconButton>
-      </Box>
-    )
-  }
-
-  return (
-    <Box sx={{ px: 2, py: 1.5, bgcolor: "#f9fafb", borderTop: "1px solid #e4e4e7", borderBottom: "1px solid #e4e4e7" }}>
-      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5, mb: 1.5 }}>
-        <TextField label="Location" size="small" value={draft.location} onChange={set("location")} />
-        <TextField label="Description" size="small" value={draft.description} onChange={set("description")} />
-        <TextField label="Estimate Low" size="small" type="number" value={draft.estimate_low} onChange={set("estimate_low")}
-          InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
-        <TextField label="Estimate High" size="small" type="number" value={draft.estimate_high} onChange={set("estimate_high")}
-          InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
-      </Box>
-      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5, mb: 1.5 }}>
-        <Select size="small" value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value as LineItem["category"] }))}>
-          {CATEGORIES.map(c => <MenuItem key={c} value={c}>{CAT_CONFIG[c].label}</MenuItem>)}
-        </Select>
-        <TextField label="Sort Order" size="small" type="number" value={draft.sort_order} onChange={set("sort_order")} />
-      </Box>
-      <TextField label="Notes" size="small" fullWidth multiline rows={2} value={draft.notes} onChange={set("notes")} sx={{ mb: 1.5 }} />
-      <FormControlLabel
-        control={<Switch size="small" checked={draft.is_complete} onChange={e => setDraft(d => ({ ...d, is_complete: e.target.checked }))} />}
-        label={<Typography sx={{ fontSize: "0.8rem" }}>Mark as complete</Typography>}
-        sx={{ mb: 1.5 }}
-      />
-      <Box sx={{ display: "flex", gap: 1 }}>
-        <Button size="small" variant="contained" onClick={save} disabled={saving}
-          startIcon={saving ? <CircularProgress size={12} color="inherit" /> : <CheckIcon />}
-          sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a50e26" }, fontWeight: 700, fontSize: "0.75rem" }}>
-          Save
-        </Button>
-        <Button size="small" onClick={() => { setEditing(false); setDraft(item) }} color="inherit" sx={{ fontSize: "0.75rem" }}>Cancel</Button>
-      </Box>
-    </Box>
-  )
-}
-
-// ── Add Line Item Dialog ───────────────────────────────────────────────────────
-
-interface AddItemDialogProps {
-  open: boolean
-  defaultPhase: number
-  onClose: () => void
-  onSaved: (i: LineItem) => void
-}
-
-function AddItemDialog({ open, defaultPhase, onClose, onSaved }: AddItemDialogProps) {
-  const [phase, setPhase] = useState(defaultPhase)
-  const [location, setLocation] = useState("")
-  const [description, setDescription] = useState("")
-  const [category, setCategory] = useState<LineItem["category"]>("INFRA")
-  const [estimateLow, setEstimateLow] = useState("")
-  const [estimateHigh, setEstimateHigh] = useState("")
-  const [notes, setNotes] = useState("")
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => { if (open) { setPhase(defaultPhase); setLocation(""); setDescription(""); setCategory("INFRA"); setEstimateLow(""); setEstimateHigh(""); setNotes(""); setError(null) } }, [open, defaultPhase])
-
-  const save = async () => {
-    if (!description.trim() || !location.trim()) { setError("Location and description are required."); return }
-    setSaving(true); setError(null)
-    try {
-      const res = await client.post("/fundraising/line-items/", {
-        phase, location, description, category,
-        estimate_low: parseFloat(estimateLow) || 0,
-        estimate_high: parseFloat(estimateHigh) || 0,
-        notes,
-      })
-      onSaved(res.data)
-      onClose()
-    } catch { setError("Failed to save.") } finally { setSaving(false) }
+    } catch { setError("Save failed."); setSaving(false) }
   }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
-        <Typography fontWeight={700}>Add Line Item</Typography>
-        <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
-      </DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}>
+      <DialogTitle>Add Deposit</DialogTitle>
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}>
         {error && <Alert severity="error">{error}</Alert>}
-        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-          <Select size="small" value={phase} onChange={e => setPhase(Number(e.target.value))}>
-            {[1, 2, 3].map(p => <MenuItem key={p} value={p}>Phase {p}</MenuItem>)}
-          </Select>
-          <Select size="small" value={category} onChange={e => setCategory(e.target.value as LineItem["category"])}>
-            {CATEGORIES.map(c => <MenuItem key={c} value={c}>{CAT_CONFIG[c].label}</MenuItem>)}
-          </Select>
-        </Box>
-        <TextField label="Location" size="small" fullWidth value={location} onChange={e => setLocation(e.target.value)} placeholder='e.g. "Diamond 8"' />
-        <TextField label="Description" size="small" fullWidth value={description} onChange={e => setDescription(e.target.value)} placeholder='e.g. "Fencing replacement"' />
-        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-          <TextField label="Estimate Low" size="small" type="number" value={estimateLow} onChange={e => setEstimateLow(e.target.value)}
-            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
-          <TextField label="Estimate High" size="small" type="number" value={estimateHigh} onChange={e => setEstimateHigh(e.target.value)}
-            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />
-        </Box>
-        <TextField label="Notes" size="small" fullWidth multiline rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
+        <FormControlLabel
+          control={<Switch checked={form.is_in_kind} onChange={e => setForm(p => ({ ...p, is_in_kind: e.target.checked }))} />}
+          label="In-Kind Contribution (non-cash)"
+        />
+        {form.is_in_kind ? (
+          <TextField label="Description" value={form.in_kind_description}
+            onChange={e => setForm(p => ({ ...p, in_kind_description: e.target.value }))}
+            size="small" fullWidth placeholder="e.g. Labor for dugout repair, Equipment donation" />
+        ) : (
+          <TextField label="Amount" value={form.amount}
+            onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
+            size="small" type="number"
+            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+            fullWidth required />
+        )}
+        <TextField label="Date" value={form.date}
+          onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+          size="small" type="date" fullWidth />
+        <TextField select label="Earmark for Line Item (optional)" value={form.line_item_id}
+          onChange={e => setForm(p => ({ ...p, line_item_id: e.target.value }))}
+          size="small" fullWidth>
+          <MenuItem value=""><em>None — general fund</em></MenuItem>
+          {allItems.map(item => (
+            <MenuItem key={item.id} value={item.id}>
+              {item.location ? `[${item.location}] ` : ""}{item.description}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField label="Notes" value={form.notes}
+          onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+          size="small" fullWidth />
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} color="inherit">Cancel</Button>
-        <Button variant="contained" onClick={save} disabled={saving}
-          startIcon={saving ? <CircularProgress size={14} color="inherit" /> : undefined}
-          sx={{ bgcolor: RED, "&:hover": { bgcolor: "#a50e26" }, fontWeight: 700 }}>
-          Add Item
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={handleSave} variant="contained" disabled={saving}>
+          {saving ? <CircularProgress size={16} /> : "Save"}
         </Button>
       </DialogActions>
     </Dialog>
   )
 }
 
-// ── Facilities Plan Tab ───────────────────────────────────────────────────────
-
-function FacilitiesPlanTab({ lineItems, setLineItems }: {
-  lineItems: LineItem[]
-  setLineItems: React.Dispatch<React.SetStateAction<LineItem[]>>
+function CampaignDialog({
+  open, campaign, onSave, onClose,
+}: {
+  open: boolean
+  campaign: Campaign | null
+  onSave: (data: Record<string, unknown>) => Promise<void>
+  onClose: () => void
 }) {
-  const [addDialog, setAddDialog] = useState<{ phase: number } | null>(null)
+  const [form, setForm] = useState({
+    name:          campaign?.name ?? "",
+    description:   campaign?.description ?? "",
+    campaign_type: campaign?.campaign_type ?? "DONATION",
+    goal:          campaign?.goal != null ? String(campaign.goal) : "",
+    is_active:     campaign?.is_active ?? true,
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState("")
 
-  const handleUpdated = (updated: LineItem) =>
-    setLineItems(prev => prev.map(i => i.id === updated.id ? updated : i))
+  const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(prev => ({ ...prev, [field]: e.target.value }))
 
-  const handleDeleted = (id: number) =>
-    setLineItems(prev => prev.filter(i => i.id !== id))
-
-  const handleAdded = (item: LineItem) =>
-    setLineItems(prev => [...prev, item].sort((a, b) => a.phase - b.phase || a.sort_order - b.sort_order || a.id - b.id))
-
-  const phases = [1, 2, 3] as const
+  const handleSave = async () => {
+    if (!form.name.trim()) { setError("Campaign name is required."); return }
+    setSaving(true)
+    try {
+      await onSave({ ...form, goal: form.goal !== "" ? Number(form.goal) : null })
+    } catch { setError("Save failed."); setSaving(false) }
+  }
 
   return (
-    <Box sx={{ maxWidth: 900 }}>
-      <Typography sx={{ fontSize: "0.82rem", color: "#888", mb: 3 }}>
-        This is the master project list. Add, edit, or remove line items as plans evolve. Cost estimates here drive the progress bars on the Progress tab.
-      </Typography>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{campaign ? "Edit Campaign" : "New Campaign"}</DialogTitle>
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}>
+        {error && <Alert severity="error">{error}</Alert>}
+        <TextField label="Name" value={form.name} onChange={f("name")} size="small" fullWidth required />
+        <TextField label="Description" value={form.description} onChange={f("description")} size="small" fullWidth multiline rows={2} />
+        <TextField select label="Campaign Type" value={form.campaign_type}
+          onChange={e => setForm(p => ({ ...p, campaign_type: e.target.value }))} size="small" fullWidth>
+          {Object.entries(CAMPAIGN_TYPES).map(([k, v]) => <MenuItem key={k} value={k}>{v.label}</MenuItem>)}
+        </TextField>
+        <TextField label="Goal (optional)" value={form.goal} onChange={f("goal")} size="small" type="number"
+          InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} fullWidth />
+        <FormControlLabel
+          control={<Switch checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} />}
+          label="Active"
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={handleSave} variant="contained" disabled={saving}>
+          {saving ? <CircularProgress size={16} /> : "Save"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
 
-      {phases.map(phase => {
-        const items = lineItems.filter(i => i.phase === phase)
-        const totalLow = items.reduce((s, i) => s + i.estimate_low, 0)
-        const totalHigh = items.reduce((s, i) => s + i.estimate_high, 0)
-        const phaseColor = PHASE_COLORS[phase]
+function CampaignsTab({
+  campaigns, allItems, onRefresh,
+}: {
+  campaigns: Campaign[]
+  allItems: FundraisingItem[]
+  onRefresh: () => void
+}) {
+  const [dialogOpen, setDialogOpen]       = useState(false)
+  const [editCampaign, setEditCampaign]   = useState<Campaign | null>(null)
+  const [typeFilter, setTypeFilter]       = useState<string | null>(null)
 
-        return (
-          <Box key={phase} sx={{ mb: 3 }}>
-            {/* Phase header */}
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0 }}>
-              <Box sx={{ width: 4, height: 24, bgcolor: phaseColor, borderRadius: 1 }} />
-              <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", flex: 1 }}>{PHASE_LABELS[phase]}</Typography>
-              <Typography sx={{ fontSize: "0.75rem", color: "#888" }}>{fmtRange(totalLow, totalHigh)}</Typography>
-            </Box>
+  const filtered = typeFilter ? campaigns.filter(c => c.campaign_type === typeFilter) : campaigns
 
-            <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", mt: 1 }}>
-              {/* Table header */}
-              <Box sx={{
-                display: "grid", gridTemplateColumns: "1fr 90px 80px 80px 32px 32px",
-                gap: 1.5, px: 2, py: 1,
-                bgcolor: "#f9fafb", borderBottom: "1px solid #e4e4e7",
-              }}>
-                {["Item", "Category", "Est. Low", "Est. High", "", ""].map((h, i) => (
-                  <Typography key={i} sx={{ fontSize: "0.68rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    {h}
-                  </Typography>
-                ))}
-              </Box>
+  const handleDelete = async (id: number) => {
+    if (!confirm("Delete this campaign and all its deposits?")) return
+    try { await client.delete(`/fundraising/campaigns/${id}/`); onRefresh() }
+    catch (e) { console.error("Delete campaign failed", e) }
+  }
 
-              {items.length === 0 && (
-                <Box sx={{ py: 3, textAlign: "center" }}>
-                  <Typography sx={{ color: "#bbb", fontSize: "0.8rem" }}>No items in this phase.</Typography>
-                </Box>
-              )}
+  return (
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, flexWrap: "wrap", gap: 1 }}>
+        <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>
+          <Chip label="All" size="small" variant={typeFilter === null ? "filled" : "outlined"} onClick={() => setTypeFilter(null)} />
+          {Object.entries(CAMPAIGN_TYPES).map(([key, info]) => (
+            <Chip key={key} label={info.label} size="small" color={info.color}
+              variant={typeFilter === key ? "filled" : "outlined"}
+              onClick={() => setTypeFilter(typeFilter === key ? null : key)} />
+          ))}
+        </Box>
+        <Button variant="contained" startIcon={<AddIcon />}
+          onClick={() => { setEditCampaign(null); setDialogOpen(true) }}
+          sx={{ bgcolor: "#2e7d32", "&:hover": { bgcolor: "#1b5e20" } }}>
+          New Campaign
+        </Button>
+      </Box>
 
-              {items.map((item, idx) => (
-                <Box key={item.id} sx={{ borderBottom: idx < items.length - 1 ? "1px solid #f0f0f0" : "none" }}>
-                  <LineItemRow item={item} onUpdated={handleUpdated} onDeleted={handleDeleted} />
-                </Box>
-              ))}
+      {filtered.map(campaign => (
+        <CampaignCard
+          key={campaign.id}
+          campaign={campaign}
+          allItems={allItems}
+          onEdit={() => { setEditCampaign(campaign); setDialogOpen(true) }}
+          onDelete={() => handleDelete(campaign.id)}
+        />
+      ))}
 
-              {/* Add row */}
-              <Box sx={{ px: 2, py: 1.25, bgcolor: "#f9fafb", borderTop: "1px solid #e4e4e7" }}>
-                <Button size="small" startIcon={<AddIcon />}
-                  onClick={() => setAddDialog({ phase })}
-                  sx={{ fontSize: "0.75rem", color: "#888" }}>
-                  Add item to Phase {phase}
-                </Button>
-              </Box>
-            </Paper>
-          </Box>
-        )
-      })}
+      {filtered.length === 0 && (
+        <Box sx={{ textAlign: "center", py: 8 }}>
+          <Typography color="text.secondary">
+            {typeFilter ? `No ${CAMPAIGN_TYPES[typeFilter]?.label ?? typeFilter} campaigns.` : "No campaigns yet."}
+          </Typography>
+        </Box>
+      )}
 
-      {addDialog && (
-        <AddItemDialog
-          open={!!addDialog}
-          defaultPhase={addDialog.phase}
-          onClose={() => setAddDialog(null)}
-          onSaved={item => { handleAdded(item); setAddDialog(null) }}
+      {dialogOpen && (
+        <CampaignDialog
+          open
+          campaign={editCampaign}
+          onSave={async data => {
+            if (editCampaign) await client.patch(`/fundraising/campaigns/${editCampaign.id}/`, data)
+            else await client.post("/fundraising/campaigns/", data)
+            setDialogOpen(false); onRefresh()
+          }}
+          onClose={() => setDialogOpen(false)}
         />
       )}
     </Box>
@@ -906,60 +1348,68 @@ function FacilitiesPlanTab({ lineItems, setLineItems }: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function FundraisingPage() {
-  const [tab, setTab] = useState(0)
-  const [summary, setSummary] = useState<Summary | null>(null)
-  const [lineItems, setLineItems] = useState<LineItem[]>([])
-  const [loadingItems, setLoadingItems] = useState(true)
-  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [tab, setTab]               = useState(0)
+  const [summary, setSummary]       = useState<FundraisingSummary | null>(null)
+  const [plans, setPlans]           = useState<Plan[]>([])
+  const [campaigns, setCampaigns]   = useState<Campaign[]>([])
+  const [allItems, setAllItems]     = useState<FundraisingItem[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState("")
 
-  const loadSummary = () => {
-    client.get("/fundraising/summary/")
-      .then(r => setSummary(r.data))
-      .catch(() => setSummaryError("Failed to load fundraising summary."))
-  }
-
-  useEffect(() => { loadSummary() }, [])
-
-  useEffect(() => {
-    client.get("/fundraising/line-items/")
-      .then(r => setLineItems(r.data ?? []))
-      .catch(() => {})
-      .finally(() => setLoadingItems(false))
+  const load = useCallback(async () => {
+    setLoading(true); setError("")
+    try {
+      const [sumRes, planRes, campRes, itemRes] = await Promise.all([
+        client.get("/fundraising/summary/"),
+        client.get("/fundraising/plans/"),
+        client.get("/fundraising/campaigns/"),
+        client.get("/fundraising/line-items/"),
+      ])
+      setSummary(sumRes.data)
+      setPlans(planRes.data)
+      setCampaigns(campRes.data)
+      setAllItems(itemRes.data)
+    } catch { setError("Failed to load fundraising data.") }
+    finally { setLoading(false) }
   }, [])
 
-  // When line items change, refresh summary too (estimates may have changed)
-  useEffect(() => {
-    if (!loadingItems) loadSummary()
-  }, [lineItems]) // eslint-disable-line
+  useEffect(() => { load() }, [load])
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "60vh" }}>
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error" action={<Button onClick={load} size="small">Retry</Button>}>{error}</Alert>
+      </Box>
+    )
+  }
 
   return (
-    <Box>
-      {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
-        <Box sx={{ width: 4, height: 28, bgcolor: RED, borderRadius: 1, flexShrink: 0 }} />
-        <Box>
-          <Typography variant="h5" fontWeight={700}>Fundraising</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Capital improvement campaigns and project progress tracker.
-          </Typography>
-        </Box>
-      </Box>
-
-      {summaryError && <Alert severity="error" sx={{ mb: 2 }}>{summaryError}</Alert>}
-
-      {/* Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)}
-          sx={{ "& .MuiTab-root": { textTransform: "none", fontWeight: 600, minHeight: 44 } }}>
-          <Tab label="Progress" icon={<TrendingUpIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
-          <Tab label="Campaigns" icon={<CampaignIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
-          <Tab label="Facilities Plan" icon={<ConstructionIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <Box sx={{ px: 3, pt: 3, pb: 0 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "#2e7d32" }}>Fundraising</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Capital improvement plans, campaigns, and progress tracker
+        </Typography>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: "divider" }}>
+          <Tab label="Progress" />
+          <Tab label="Plans" />
+          <Tab label="Campaigns" />
         </Tabs>
       </Box>
 
-      {tab === 0 && <ProgressTab summary={summary} />}
-      {tab === 1 && <CampaignsTab lineItems={lineItems} />}
-      {tab === 2 && <FacilitiesPlanTab lineItems={lineItems} setLineItems={setLineItems} />}
+      <Box sx={{ flex: 1, overflow: "auto" }}>
+        {tab === 0 && summary && <ProgressTab summary={summary} />}
+        {tab === 1 && <PlansTab plans={plans} allItems={allItems} onRefresh={load} />}
+        {tab === 2 && <CampaignsTab campaigns={campaigns} allItems={allItems} onRefresh={load} />}
+      </Box>
     </Box>
   )
 }

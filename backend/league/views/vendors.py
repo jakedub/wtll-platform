@@ -1,16 +1,26 @@
 """
-Vendors API — CRUD for league vendor/supplier contacts.
+Vendors API — CRUD for league vendor/supplier contacts and locations.
 """
 from rest_framework import serializers, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 
-from league.models.vendor import Vendor, VENDOR_CATEGORIES, BOARD_ROLES
+from league.models.vendor import Vendor, VendorLocation, VENDOR_CATEGORIES, BOARD_ROLES
+
+
+# ─── Serializers ──────────────────────────────────────────────────────────────
+
+class VendorLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = VendorLocation
+        fields = ["id", "label", "address", "phone", "website", "notes", "is_primary", "sort_order"]
 
 
 class VendorSerializer(serializers.ModelSerializer):
     category_display   = serializers.CharField(source="get_category_display",  read_only=True)
     board_role_display = serializers.CharField(source="get_board_role_display", read_only=True)
+    locations          = VendorLocationSerializer(many=True, read_only=True)
 
     class Meta:
         model = Vendor
@@ -18,10 +28,14 @@ class VendorSerializer(serializers.ModelSerializer):
             "id", "name", "category", "category_display",
             "contact_name", "contact_phone", "contact_email",
             "website", "notes", "board_role", "board_role_display",
+            "products", "account_number", "account_name",
+            "locations",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "category_display", "board_role_display", "created_at", "updated_at"]
+        read_only_fields = ["id", "category_display", "board_role_display", "locations", "created_at", "updated_at"]
 
+
+# ─── Vendor CRUD ──────────────────────────────────────────────────────────────
 
 class VendorListView(APIView):
     """GET /api/vendors/   — list all (optionally filtered by ?category=)
@@ -29,7 +43,7 @@ class VendorListView(APIView):
     """
 
     def get(self, request):
-        qs = Vendor.objects.all()
+        qs = Vendor.objects.prefetch_related("locations").all()
         cat = request.query_params.get("category")
         if cat:
             qs = qs.filter(category=cat)
@@ -40,6 +54,7 @@ class VendorListView(APIView):
         if not s.is_valid():
             return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
         obj = s.save()
+        obj.refresh_from_db()
         return Response(VendorSerializer(obj).data, status=status.HTTP_201_CREATED)
 
 
@@ -51,7 +66,7 @@ class VendorDetailView(APIView):
 
     def _get(self, pk):
         try:
-            return Vendor.objects.get(pk=pk)
+            return Vendor.objects.prefetch_related("locations").get(pk=pk)
         except Vendor.DoesNotExist:
             return None
 
@@ -69,6 +84,7 @@ class VendorDetailView(APIView):
         if not s.is_valid():
             return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
         updated = s.save()
+        updated.refresh_from_db()
         return Response(VendorSerializer(updated).data)
 
     def delete(self, request, pk):
@@ -78,6 +94,45 @@ class VendorDetailView(APIView):
         obj.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
+# ─── Location CRUD ────────────────────────────────────────────────────────────
+
+class VendorLocationListCreateView(APIView):
+    """GET  /api/vendors/<vendor_pk>/locations/
+       POST /api/vendors/<vendor_pk>/locations/
+    """
+
+    def get(self, request, vendor_pk):
+        vendor = get_object_or_404(Vendor, pk=vendor_pk)
+        return Response(VendorLocationSerializer(vendor.locations.all(), many=True).data)
+
+    def post(self, request, vendor_pk):
+        vendor = get_object_or_404(Vendor, pk=vendor_pk)
+        s = VendorLocationSerializer(data=request.data)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        loc = s.save(vendor=vendor)
+        return Response(VendorLocationSerializer(loc).data, status=status.HTTP_201_CREATED)
+
+
+class VendorLocationDetailView(APIView):
+    """PATCH  /api/vendors/locations/<pk>/
+       DELETE /api/vendors/locations/<pk>/
+    """
+
+    def patch(self, request, pk):
+        loc = get_object_or_404(VendorLocation, pk=pk)
+        s = VendorLocationSerializer(loc, data=request.data, partial=True)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(VendorLocationSerializer(s.save()).data)
+
+    def delete(self, request, pk):
+        get_object_or_404(VendorLocation, pk=pk).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ─── Choice lists ─────────────────────────────────────────────────────────────
 
 class VendorCategoriesView(APIView):
     """GET /api/vendors/categories/  — list available category choices"""

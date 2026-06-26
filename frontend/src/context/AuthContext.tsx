@@ -20,7 +20,12 @@ export interface AuthUser {
   first_name: string
   last_name: string
   is_staff: boolean
+  is_board_member: boolean
   is_coach: boolean
+  is_umpire: boolean
+  is_active: boolean
+  last_login: string | null
+  date_joined: string | null
   coached_teams: { id: number; name: string; division_id: number | null }[]
   assistant_coached_teams: { id: number; name: string; division_id: number | null }[]
 }
