@@ -229,9 +229,9 @@ export default function PublicPitchCountPage() {
                               {row.last_name}, {row.first_name}
                             </Typography>
                           </Box>
-                          {row.pitch_status?.consecutive_days_pitched >= 2 && (
+                          {(row.pitch_status?.consecutive_days_pitched ?? 0) >= 2 && (
                             <Typography sx={{ fontSize: "0.68rem", color: "#b45309" }}>
-                              {row.pitch_status.consecutive_days_pitched} consecutive days
+                              {row.pitch_status!.consecutive_days_pitched} consecutive days
                             </Typography>
                           )}
                         </TableCell>
@@ -245,7 +245,7 @@ export default function PublicPitchCountPage() {
                         </TableCell>
                         <TableCell align="center">
                           <Typography sx={{ fontSize: "0.82rem", color: "#555" }}>
-                            {row.pitch_status?.pitches_last_outing > 0 ? row.pitch_status.pitches_last_outing : "—"}
+                            {(row.pitch_status?.pitches_last_outing ?? 0) > 0 ? row.pitch_status!.pitches_last_outing : "—"}
                           </Typography>
                         </TableCell>
                         <TableCell align="center">

@@ -397,7 +397,7 @@ function LocationCard({
                 <Typography
                   component={mapsUrl ? "a" : "span"}
                   href={mapsUrl ?? undefined} target="_blank" rel="noopener"
-                  onClick={e => e.stopPropagation()}
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
                   sx={{
                     fontSize: "0.7rem", color: "rgba(255,255,255,0.45)",
                     textDecoration: "none", "&:hover": { color: "rgba(255,255,255,0.75)" },
