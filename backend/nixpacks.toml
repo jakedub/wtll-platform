@@ -1,0 +1,5 @@
+# Nixpacks configuration for Railway deployment
+# stdenv.cc.cc.lib provides libstdc++.so.6 which pandas/numpy C extensions require
+
+[phases.setup]
+nixPkgs = ["stdenv.cc.cc.lib"]
