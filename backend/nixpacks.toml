@@ -1,5 +1,11 @@
 # Nixpacks configuration for Railway deployment
-# stdenv.cc.cc.lib provides libstdc++.so.6 which pandas/numpy C extensions require
+# - python3, postgresql_16.dev, gcc: required for the app build
+# - libstdc++6 (apt): provides libstdc++.so.6 at a standard system path
+#   so pandas/numpy C extensions can find it at runtime.
+#   stdenv.cc.cc.lib installs to the nix store which is not on LD_LIBRARY_PATH
+#   by default; the apt package installs to /usr/lib/x86_64-linux-gnu/ which
+#   the dynamic linker searches automatically.
 
 [phases.setup]
-nixPkgs = ["python3", "postgresql_16.dev", "gcc", "stdenv.cc.cc.lib"]
+nixPkgs = ["python3", "postgresql_16.dev", "gcc"]
+aptPkgs = ["libstdc++6"]
