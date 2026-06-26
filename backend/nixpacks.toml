@@ -1,11 +1,16 @@
 # Nixpacks configuration for Railway deployment
-# - python3, postgresql_16.dev, gcc: required for the app build
-# - libstdc++6 (apt): provides libstdc++.so.6 at a standard system path
-#   so pandas/numpy C extensions can find it at runtime.
-#   stdenv.cc.cc.lib installs to the nix store which is not on LD_LIBRARY_PATH
-#   by default; the apt package installs to /usr/lib/x86_64-linux-gnu/ which
-#   the dynamic linker searches automatically.
+#
+# nixPkgs:
+#   - python3, postgresql_16.dev, gcc: required for building the app
+#   - stdenv.cc.cc.lib: provides libstdc++.so.6 for pandas/numpy C extensions
+#
+# LD_LIBRARY_PATH:
+#   nixpacks installs packages via `nix-env -i` which links everything into
+#   ~/.nix-profile. Setting LD_LIBRARY_PATH to /root/.nix-profile/lib makes
+#   libstdc++.so.6 findable at runtime without hardcoding a nix store hash.
 
 [phases.setup]
-nixPkgs = ["python3", "postgresql_16.dev", "gcc"]
-aptPkgs = ["libstdc++6"]
+nixPkgs = ["python3", "postgresql_16.dev", "gcc", "stdenv.cc.cc.lib"]
+
+[variables]
+LD_LIBRARY_PATH = "/root/.nix-profile/lib"
