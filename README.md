@@ -399,19 +399,147 @@ BoardChecklistItem.item_type   # hard | action | allstar | showcase | ...
 
 ---
 
-## Deployment (Railway + Vercel + Neon)
+## Deployment
 
-### After merging migrations, run on Railway:
-```bash
-python manage.py migrate
-python manage.py seed_board_hub  # first time only
+The production stack uses three managed services: **Neon** (PostgreSQL database), **Railway** (Django backend), and **Vercel** (React frontend). Deploy in that order — database first, then backend, then frontend.
+
+---
+
+### 1. Neon (Database)
+
+[Neon](https://neon.tech) is a serverless Postgres platform. Sign in with GitHub.
+
+**Create a project**
+- Project name: e.g. `wtll-platform`
+- Region: closest to your users (e.g. AWS US East 2)
+- Postgres version: 16 (default). Skip Neon Auth.
+
+**Get your connection string**
+After the project is created, go to **Dashboard → Connection Details**. Select Role: `neondb_owner`, Database: `neondb`, Connection type: **Pooled connection** (hostname contains `-pooler`).
+
+Copy the full pooled connection string:
+```
+postgresql://neondb_owner:<password>@ep-<name>-pooler.<region>.aws.neon.tech/neondb?sslmode=require&channel_binding=require
 ```
 
-### Provisioning a second league (current model — one deployment per league):
-1. Create a new Neon project → copy `DATABASE_URL`
-2. Create a new Railway service from the same repo → set env vars
-3. Create a new Vercel project → set `VITE_API_URL`
-4. SSH into Railway → `python manage.py createsuperuser && python manage.py migrate`
+This becomes your `DATABASE_URL` in Railway. If it is ever exposed, rotate it immediately in **Neon → Settings → Roles → Reset password**.
+
+---
+
+### 2. Railway (Django Backend)
+
+[Railway](https://railway.app) builds and runs the Django app from your GitHub repo.
+
+**Create a service**
+1. Sign in → New Project → Deploy from GitHub repo → select your repo
+2. Before the first deploy succeeds, configure the root directory (see below) — without it Railway tries to build from the repo root and fails
+
+**Set the root directory**
+In your service → **Settings → Source → Root Directory**, enter `backend`. Railway will now install dependencies and run gunicorn from inside `backend/`.
+
+**Configure environment variables**
+In your service → **Variables**, add:
+
+| Key | Value |
+|---|---|
+| `DATABASE_URL` | Your Neon **pooled** connection string |
+| `SECRET_KEY` | A long random string — generate with `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
+| `DEBUG` | `False` |
+| `ALLOWED_HOSTS` | `*.up.railway.app` (or your custom domain) |
+| `CORS_ALLOWED_ORIGINS` | Your Vercel frontend URL, e.g. `https://wtll-platform.vercel.app` (fill in after Vercel deploys) |
+| `FRONTEND_URL` | Same Vercel URL |
+| `GOOGLE_MAPS_API_KEY` | Required for address geocoding — Google Cloud Console |
+| `RESEND_API_KEY` | Required for magic-link emails — [resend.com](https://resend.com) |
+| `FROM_EMAIL` | e.g. `noreply@yourdomain.com` |
+
+**Generate a public domain**
+In your service → **Settings → Networking → Generate Domain**. Copy this URL — you'll need it for Vercel's `VITE_API_URL`.
+
+**nixpacks.toml**
+`backend/nixpacks.toml` explicitly lists all required Nix packages so Railway builds correctly:
+```toml
+[phases.setup]
+nixPkgs = ["python3", "postgresql_16.dev", "gcc", "stdenv.cc.cc.lib"]
+```
+`stdenv.cc.cc.lib` provides `libstdc++.so.6` which pandas and numpy require. Railway picks this file up automatically.
+
+**Run migrations and seed data**
+Once the first deploy is live, open your service → **Console** tab and run:
+
+```bash
+# Apply all migrations
+/opt/venv/bin/python manage.py migrate
+
+# Create your admin account
+/opt/venv/bin/python manage.py createsuperuser
+
+# Seed league identity, site settings, and board hub calendar + checklist
+/opt/venv/bin/python manage.py seed_production
+```
+
+`seed_production` is safe to re-run — it uses `get_or_create` throughout.
+
+**Healthcheck**
+Railway monitors `/api/settings/public/` (configured in `railway.toml`). This endpoint requires no auth and is used to confirm the app is up.
+
+---
+
+### 3. Vercel (React Frontend)
+
+[Vercel](https://vercel.com) builds the Vite/React app and serves it as a static site with client-side routing.
+
+**Create a project**
+1. Sign in → Add New Project → Import Git Repository → select your repo
+2. Set **Root Directory** to `frontend`
+3. Framework preset: **Vite**
+
+**Add environment variables**
+In Project → **Settings → Environment Variables**:
+
+| Key | Value |
+|---|---|
+| `VITE_API_URL` | Your Railway backend URL, e.g. `https://wtll-platform-production.up.railway.app` — no trailing slash |
+
+`VITE_API_URL` is baked into the JS bundle at build time. If you change it, redeploy.
+
+**vercel.json**
+`frontend/vercel.json` rewrites all routes to `index.html` so React Router handles navigation. No additional Vercel config needed.
+
+---
+
+### 4. Post-Deploy: Update Railway CORS
+
+After Vercel gives you a URL, go back to Railway → Variables and update:
+
+```
+CORS_ALLOWED_ORIGINS=https://wtll-platform.vercel.app
+FRONTEND_URL=https://wtll-platform.vercel.app
+```
+
+Trigger a redeploy on Railway. Magic-link emails will now redirect back to your Vercel URL.
+
+---
+
+### 5. First Login
+
+With `RESEND_API_KEY` configured:
+1. Open your Vercel URL → request a magic link for your superuser email
+2. Check your inbox → click the link → you're in
+3. Go to **Settings → League Identity** → update name, colors, Little League ID
+4. Go to **Settings → Site Settings** → toggle modules on/off for your league
+
+Alternatively, use the Django admin at `https://<railway-url>/admin/` with the superuser credentials you created in the console.
+
+---
+
+### Provisioning a second league
+
+The current model is one deployment per league (separate Neon project, Railway service, and Vercel project each). Steps:
+
+1. Create a new Neon project → copy the pooled `DATABASE_URL`
+2. Create a new Railway service from the same repo → set Root Directory to `backend`, add all env vars
+3. Create a new Vercel project from the same repo → set Root Directory to `frontend`, set `VITE_API_URL` to the new Railway URL
+4. Run `migrate`, `createsuperuser`, and `seed_production` in the Railway console
 5. Log in → Settings → League Identity → configure name, colors, ID
 6. Settings → Site Settings → toggle off unused modules
 
