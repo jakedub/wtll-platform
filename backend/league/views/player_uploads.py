@@ -3,7 +3,6 @@
 import logging
 from datetime import datetime
 
-import pandas as pd
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -90,6 +89,11 @@ class UploadPlayersView(APIView):
             sport_override = None  # ignore invalid values, fall back to inference
 
         # ── Parse CSV ─────────────────────────────────────────────────────────
+        # pandas is imported here (not at module level) so that a missing
+        # libstdc++.so.6 in the deployment environment does not prevent the
+        # entire app from starting — only this endpoint would fail.
+        import pandas as pd  # noqa: PLC0415
+
         try:
             df = pd.read_csv(file, dtype=str, encoding="utf-8-sig")
         except Exception as exc:
