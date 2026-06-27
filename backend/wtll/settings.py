@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
+    "anymail",
     # Local
     "league",
     "drf_spectacular"
@@ -179,21 +180,24 @@ REST_FRAMEWORK = {
 GOOGLE_MAPS_API_KEY = config("GOOGLE_MAPS_API_KEY", default="")
 
 # ─── Email ────────────────────────────────────────────────────────────────────
-# Local dev: print emails to the terminal (no SMTP setup needed).
-# Production: set EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-# and configure EMAIL_HOST / EMAIL_PORT / EMAIL_HOST_USER / EMAIL_HOST_PASSWORD.
-# Recommended provider: Resend (resend.com) — free tier, simple SMTP.
+# Local dev: emails print to the terminal (console backend, no setup needed).
+# Production (Railway): Railway blocks outbound SMTP ports, so we use Resend's
+# HTTP API via django-anymail instead.
+#
+# Required Railway Variables:
+#   EMAIL_BACKEND=anymail.backends.resend.EmailBackend
+#   RESEND_API_KEY=re_...
+#   DEFAULT_FROM_EMAIL=WTLL Platform <noreply@yourdomain.com>
 
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND",
     default="django.core.mail.backends.console.EmailBackend",
 )
-EMAIL_HOST = config("EMAIL_HOST", default="smtp.resend.com")
-EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
-EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
-EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="resend")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="WTLL Platform <noreply@wtll.org>")
+
+ANYMAIL = {
+    "RESEND_API_KEY": config("RESEND_API_KEY", default=""),
+}
 
 # Frontend URL used to construct magic link URLs in emails
 FRONTEND_URL = config("FRONTEND_URL", default="")

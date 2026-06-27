@@ -12,6 +12,7 @@ reportlab==4.2.5
 numpy==1.26.4
 pandas==2.2.3
 requests==2.32.3
+django-anymail[resend]==12.0
 icalendar==6.1.0
 shapely==2.0.6
 openpyxl==3.1.5
