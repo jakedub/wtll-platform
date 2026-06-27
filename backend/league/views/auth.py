@@ -1,24 +1,21 @@
 """
-Passwordless (magic-link) authentication views.
+Authentication views.
 
-Flow:
-  1. POST /api/auth/request-login/  { "email": "..." }
-     → Creates a LoginToken, emails the magic link to the user.
-     → Always returns 200 so we don't leak whether an email exists.
+Active:
+  1. POST /api/auth/login/          { "email": "...", "password": "..." }
+     → Authenticates with email + password, returns a DRF auth token.
 
-  2. GET  /api/auth/verify/?token=<uuid>
-     → Validates the token, finds or creates the User, returns a DRF auth token.
-     → Marks the LoginToken as used.
-
-  3. GET  /api/auth/me/             (requires Authorization: Token <token>)
+  2. GET  /api/auth/me/             (requires Authorization: Token <token>)
      → Returns current user's profile and linked teams.
 
-  4. POST /api/auth/logout/         (requires Authorization: Token <token>)
+  3. POST /api/auth/logout/         (requires Authorization: Token <token>)
      → Deletes the DRF auth token (server-side logout).
+
+Commented out (magic-link — requires email provider):
+  - POST /api/auth/request-login/
+  - GET  /api/auth/verify/
 """
-from django.conf import settings
-from django.core.mail import send_mail
-from django.utils import timezone
+from django.contrib.auth import authenticate
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -26,25 +23,14 @@ from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
-from league.models.auth_token import LoginToken
+# ── Magic-link imports (kept for future re-enable) ────────────────────────────
+# from django.conf import settings
+# from django.core.mail import send_mail
+# from django.utils import timezone
+# from league.models.auth_token import LoginToken
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _get_or_create_user(email: str):
-    """Find an existing user by email or create a new one."""
-    from league.models import User
-    email = email.lower().strip()
-    try:
-        return User.objects.get(email=email), False
-    except User.DoesNotExist:
-        user = User.objects.create_user(
-            username=email,
-            email=email,
-            password=None,          # No password — magic link only
-        )
-        return user, True
-
 
 def _get_or_create_auth_token(user):
     """Return (token_key, created) for the DRF auth token."""
@@ -53,106 +39,86 @@ def _get_or_create_auth_token(user):
     return token.key, created
 
 
-def _send_magic_link(email: str, token_uuid: str, request) -> None:
-    """Compose and send the magic link email."""
-    # Build the frontend URL — the React app handles /auth/callback
-    frontend_origin = getattr(settings, "FRONTEND_URL", "").rstrip("/")
-    if not frontend_origin:
-        # Fallback: derive from the request
-        frontend_origin = request.build_absolute_uri("/").rstrip("/")
-
-    link = f"{frontend_origin}/auth/callback?token={token_uuid}"
-
-    send_mail(
-        subject="Your WTLL Platform login link",
-        message=(
-            f"Click the link below to sign in to WTLL Platform.\n\n"
-            f"{link}\n\n"
-            f"This link expires in 15 minutes and can only be used once.\n"
-            f"If you didn't request this, you can ignore this email."
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[email],
-        fail_silently=False,
-    )
-
-
 # ── Views ──────────────────────────────────────────────────────────────────────
 
-class RequestLoginView(APIView):
+class PasswordLoginView(APIView):
     """
-    POST /api/auth/request-login/
-    Body: { "email": "coach@example.com" }
-    Sends a magic link to the given email address.
-    Always responds 200 to avoid leaking whether an email is registered.
+    POST /api/auth/login/
+    Body: { "email": "...", "password": "..." }
+    Authenticates with email + password and returns a DRF auth token.
     """
     authentication_classes = []
     permission_classes = []
 
     def post(self, request):
         email = (request.data.get("email") or "").lower().strip()
-        if not email or "@" not in email:
+        password = request.data.get("password") or ""
+
+        if not email or not password:
             return Response(
-                {"error": "A valid email address is required."},
+                {"error": "Email and password are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Invalidate any existing unused tokens for this email to avoid confusion
-        LoginToken.objects.filter(email=email, is_used=False).update(is_used=True)
-
-        token_obj = LoginToken.objects.create(email=email)
-
-        try:
-            _send_magic_link(email, str(token_obj.token), request)
-        except Exception as exc:
-            # Log but don't expose the error to the client
-            import logging
-            logging.getLogger(__name__).error("Magic link send failed: %s", exc)
-
-        return Response({"detail": "If that email is on file, a login link is on its way."})
-
-
-class VerifyTokenView(APIView):
-    """
-    GET /api/auth/verify/?token=<uuid>
-    Validates the magic link token and returns a DRF auth token.
-    """
-    authentication_classes = []
-    permission_classes = []
-
-    def get(self, request):
-        raw = request.query_params.get("token", "").strip()
-        if not raw:
+        # Django's authenticate() matches on username; our username == email
+        user = authenticate(request, username=email, password=password)
+        if user is None:
             return Response(
-                {"error": "Missing token parameter."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"error": "Invalid email or password."},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        try:
-            token_obj = LoginToken.objects.get(token=raw)
-        except LoginToken.DoesNotExist:
+        if not user.is_active:
             return Response(
-                {"error": "Invalid or expired login link."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"error": "This account has been deactivated."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-        if not token_obj.is_valid:
-            return Response(
-                {"error": "This login link has already been used or has expired. Request a new one."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Mark consumed before doing anything else (prevents double-use)
-        token_obj.is_used = True
-        token_obj.save(update_fields=["is_used"])
-
-        user, created = _get_or_create_user(token_obj.email)
         auth_token, _ = _get_or_create_auth_token(user)
-
         return Response({
             "token": auth_token,
             "user": _serialize_user(user),
         })
+
+
+# ── Magic-link views (commented out — requires email provider) ─────────────────
+#
+# class RequestLoginView(APIView):
+#     authentication_classes = []
+#     permission_classes = []
+#     def post(self, request):
+#         from league.models.auth_token import LoginToken
+#         email = (request.data.get("email") or "").lower().strip()
+#         if not email or "@" not in email:
+#             return Response({"error": "A valid email address is required."}, status=400)
+#         LoginToken.objects.filter(email=email, is_used=False).update(is_used=True)
+#         token_obj = LoginToken.objects.create(email=email)
+#         try:
+#             _send_magic_link(email, str(token_obj.token), request)
+#         except Exception as exc:
+#             import logging
+#             logging.getLogger(__name__).error("Magic link send failed: %s", exc)
+#         return Response({"detail": "If that email is on file, a login link is on its way."})
+#
+# class VerifyTokenView(APIView):
+#     authentication_classes = []
+#     permission_classes = []
+#     def get(self, request):
+#         from league.models.auth_token import LoginToken
+#         raw = request.query_params.get("token", "").strip()
+#         if not raw:
+#             return Response({"error": "Missing token parameter."}, status=400)
+#         try:
+#             token_obj = LoginToken.objects.get(token=raw)
+#         except LoginToken.DoesNotExist:
+#             return Response({"error": "Invalid or expired login link."}, status=400)
+#         if not token_obj.is_valid:
+#             return Response({"error": "This login link has already been used or has expired."}, status=400)
+#         token_obj.is_used = True
+#         token_obj.save(update_fields=["is_used"])
+#         user, _ = _get_or_create_user(token_obj.email)
+#         auth_token, _ = _get_or_create_auth_token(user)
+#         return Response({"token": auth_token, "user": _serialize_user(user)})
 
 
 class MeView(APIView):
@@ -299,15 +265,16 @@ class UserInviteView(IsAdminUser, APIView):
         user.is_active = True
         user.save()
 
-        # Invalidate old login tokens and send a fresh magic link
-        from league.models.auth_token import LoginToken
-        LoginToken.objects.filter(email=email, is_used=False).update(is_used=True)
-        token_obj = LoginToken.objects.create(email=email)
-        try:
-            _send_magic_link(email, str(token_obj.token), request)
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).error("Invite magic link send failed: %s", exc)
+        # Magic-link invite commented out — email provider not configured.
+        # Re-enable when email sending is set up.
+        # from league.models.auth_token import LoginToken
+        # LoginToken.objects.filter(email=email, is_used=False).update(is_used=True)
+        # token_obj = LoginToken.objects.create(email=email)
+        # try:
+        #     _send_magic_link(email, str(token_obj.token), request)
+        # except Exception as exc:
+        #     import logging
+        #     logging.getLogger(__name__).error("Invite magic link send failed: %s", exc)
 
         return Response(
             _serialize_user(user, include_teams=False),

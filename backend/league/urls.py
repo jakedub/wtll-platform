@@ -97,8 +97,9 @@ from league.views.vendors import (
 )
 from league.views.sibling_check import SiblingCheckView
 from league.views.auth import (
-    RequestLoginView, VerifyTokenView, MeView, LogoutView,
+    PasswordLoginView, MeView, LogoutView,
     UserListView, UserInviteView, UserDetailView,
+    # RequestLoginView, VerifyTokenView,  # magic-link — commented out
 )
 from league.views.schedule_generator import ScheduleGenerateView, ScheduleExportView
 from league.views.site_settings import SiteSettingsView, LeagueIdentityView, PublicLeagueIdentityView
@@ -281,8 +282,9 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     path("district-leaders/<int:pk>/",      DistrictLeaderDetailView.as_view(),    name="district-leader-detail"),
 
     # Authentication (magic link / passwordless)
-    path("auth/request-login/", RequestLoginView.as_view(),  name="auth-request-login"),
-    path("auth/verify/",         VerifyTokenView.as_view(),   name="auth-verify"),
+    path("auth/login/",          PasswordLoginView.as_view(), name="auth-login"),
+    # path("auth/request-login/", RequestLoginView.as_view(), name="auth-request-login"),  # magic-link
+    # path("auth/verify/",        VerifyTokenView.as_view(),  name="auth-verify"),          # magic-link
     path("auth/me/",             MeView.as_view(),            name="auth-me"),
     path("auth/logout/",         LogoutView.as_view(),        name="auth-logout"),
     # User management (admin only)

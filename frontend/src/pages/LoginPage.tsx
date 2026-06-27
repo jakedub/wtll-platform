@@ -1,6 +1,6 @@
 /**
- * LoginPage — magic link (passwordless) login.
- * Board members and coaches enter their email; they receive a one-time link.
+ * LoginPage — email + password login.
+ * Magic-link (passwordless) flow commented out pending email provider setup.
  */
 import { useState } from "react"
 import {
@@ -12,28 +12,32 @@ import {
   Typography,
   Alert,
 } from "@mui/material"
-import EmailIcon from "@mui/icons-material/Email"
 import client from "../api/client"
+import { useAuth } from "../context/AuthContext"
 
 export default function LoginPage() {
+  const { login } = useAuth()
   const [email, setEmail] = useState("")
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim()) return
+    if (!email.trim() || !password) return
 
     setLoading(true)
     setError(null)
 
     try {
-      await client.post("/auth/request-login/", { email: email.trim().toLowerCase() })
-      setSent(true)
+      const res = await client.post("/auth/login/", {
+        email: email.trim().toLowerCase(),
+        password,
+      })
+      login(res.data.token, res.data.user)
     } catch (err: any) {
       setError(
-        err?.response?.data?.error ?? "Something went wrong. Please try again."
+        err?.response?.data?.error ?? "Invalid email or password."
       )
     } finally {
       setLoading(false)
@@ -89,86 +93,58 @@ export default function LoginPage() {
           </Box>
         </Box>
 
-        {sent ? (
-          /* ── Sent confirmation ── */
-          <Box>
-            <Box
-              sx={{
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                bgcolor: "#f0fdf4",
-                border: "1px solid #bbf7d0",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                mb: 2,
-              }}
-            >
-              <EmailIcon sx={{ color: "#16a34a", fontSize: 24 }} />
-            </Box>
-            <Typography variant="h6" fontWeight={700} gutterBottom>
-              Check your email
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              We sent a sign-in link to <strong>{email}</strong>. Click the link in the
-              email to continue — it expires in 15 minutes.
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Didn't receive it?{" "}
-              <Box
-                component="span"
-                sx={{ color: "#C41230", cursor: "pointer", fontWeight: 600 }}
-                onClick={() => { setSent(false); setEmail("") }}
-              >
-                Try again
-              </Box>
-            </Typography>
-          </Box>
-        ) : (
-          /* ── Email form ── */
-          <Box component="form" onSubmit={handleSubmit}>
-            <Typography variant="h6" fontWeight={700} gutterBottom>
-              Sign in
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Enter your email and we'll send you a sign-in link — no password needed.
-            </Typography>
+        <Box component="form" onSubmit={handleSubmit}>
+          <Typography variant="h6" fontWeight={700} gutterBottom>
+            Sign in
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Enter your email and password to access the platform.
+          </Typography>
 
-            {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
-              </Alert>
-            )}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
 
-            <TextField
-              fullWidth
-              label="Email address"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoFocus
-              required
-              sx={{ mb: 2 }}
-              inputProps={{ autoComplete: "email" }}
-            />
+          <TextField
+            fullWidth
+            label="Email address"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoFocus
+            required
+            sx={{ mb: 2 }}
+            inputProps={{ autoComplete: "email" }}
+          />
 
-            <Button
-              fullWidth
-              type="submit"
-              variant="contained"
-              disabled={loading || !email.trim()}
-              sx={{
-                bgcolor: "#C41230",
-                "&:hover": { bgcolor: "#a50f29" },
-                py: 1.25,
-                fontWeight: 700,
-              }}
-            >
-              {loading ? <CircularProgress size={20} color="inherit" /> : "Send sign-in link"}
-            </Button>
-          </Box>
-        )}
+          <TextField
+            fullWidth
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            sx={{ mb: 2 }}
+            inputProps={{ autoComplete: "current-password" }}
+          />
+
+          <Button
+            fullWidth
+            type="submit"
+            variant="contained"
+            disabled={loading || !email.trim() || !password}
+            sx={{
+              bgcolor: "#C41230",
+              "&:hover": { bgcolor: "#a50f29" },
+              py: 1.25,
+              fontWeight: 700,
+            }}
+          >
+            {loading ? <CircularProgress size={20} color="inherit" /> : "Sign in"}
+          </Button>
+        </Box>
       </Paper>
     </Box>
   )
