@@ -60,8 +60,16 @@ class PasswordLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Django's authenticate() matches on username; our username == email
-        user = authenticate(request, username=email, password=password)
+        # Look up by email to get the actual username, then authenticate.
+        # Users created via createsuperuser may have a different username.
+        from league.models import User
+        try:
+            user_obj = User.objects.get(email=email)
+            username = user_obj.username
+        except User.DoesNotExist:
+            username = email  # will fail authenticate(), returns clean 401
+
+        user = authenticate(request, username=username, password=password)
         if user is None:
             return Response(
                 {"error": "Invalid email or password."},
