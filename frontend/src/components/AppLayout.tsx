@@ -29,8 +29,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const RAIL_BG    = '#1c1c1e'
-const DRAWER_BG  = '#111'
+// settings.primaryColor and settings.primaryColor are now driven by settings.primaryColor (League Identity)
 const RAIL_TEXT  = 'rgba(255,255,255,0.55)'
 const ITEM_TEXT  = 'rgba(255,255,255,0.82)'
 const HOVER_BG   = 'rgba(255,255,255,0.07)'
@@ -121,7 +120,7 @@ export default function AppLayout({ children }: Props) {
     <Box sx={{
       width: RAIL_W,
       height: '100%',
-      bgcolor: RAIL_BG,
+      bgcolor: settings.primaryColor,
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -249,7 +248,7 @@ export default function AppLayout({ children }: Props) {
     <Box sx={{
       width: DRAWER_W,
       height: '100%',
-      bgcolor: DRAWER_BG,
+      bgcolor: settings.primaryColor,
       display: 'flex',
       flexDirection: 'column',
       flexShrink: 0,
@@ -362,7 +361,7 @@ export default function AppLayout({ children }: Props) {
   if (isMobile) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <AppBar position="fixed" sx={{ bgcolor: RAIL_BG, borderBottom: '1px solid rgba(255,255,255,0.08)' }} elevation={0}>
+        <AppBar position="fixed" sx={{ bgcolor: settings.primaryColor, borderBottom: '1px solid rgba(255,255,255,0.08)' }} elevation={0}>
           <Toolbar>
             <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1 }}>
               <MenuIcon />
@@ -373,7 +372,7 @@ export default function AppLayout({ children }: Props) {
         </AppBar>
         <Drawer variant="temporary" open={mobileOpen} onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: true }}
-          sx={{ '& .MuiDrawer-paper': { width: RAIL_W + DRAWER_W, bgcolor: RAIL_BG, border: 'none', display: 'flex', flexDirection: 'row' } }}>
+          sx={{ '& .MuiDrawer-paper': { width: RAIL_W + DRAWER_W, bgcolor: settings.primaryColor, border: 'none', display: 'flex', flexDirection: 'row' } }}>
           {rail}
           {sectionDrawer}
         </Drawer>
