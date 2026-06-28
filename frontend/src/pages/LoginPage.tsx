@@ -3,6 +3,7 @@
  * Magic-link (passwordless) flow commented out pending email provider setup.
  */
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   Box,
   Button,
@@ -17,6 +18,7 @@ import { useAuth } from "../context/AuthContext"
 
 export default function LoginPage() {
   const { login } = useAuth()
+  const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -35,6 +37,7 @@ export default function LoginPage() {
         password,
       })
       login(res.data.token, res.data.user)
+      navigate("/", { replace: true })
     } catch (err: any) {
       setError(
         err?.response?.data?.error ?? "Invalid email or password."
