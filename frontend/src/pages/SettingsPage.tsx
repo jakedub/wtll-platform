@@ -80,7 +80,7 @@ function RoleChips({ user }: { user: ManagedUser }) {
   )
 }
 
-// ── Invite dialog ─────────────────────────────────────────────────────────────
+// ── Create user dialog ────────────────────────────────────────────────────────
 
 function InviteDialog({ open, onClose, onInvited }: {
   open: boolean
@@ -90,10 +90,11 @@ function InviteDialog({ open, onClose, onInvited }: {
   const [form, setForm] = useState({ ...EMPTY_INVITE })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sent, setSent] = useState(false)
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    if (open) { setForm({ ...EMPTY_INVITE }); setError(null); setSent(false) }
+    if (open) { setForm({ ...EMPTY_INVITE }); setError(null); setGeneratedPassword(null); setCopied(false) }
   }, [open])
 
   const send = async () => {
@@ -102,28 +103,55 @@ function InviteDialog({ open, onClose, onInvited }: {
     try {
       const res = await client.post("/auth/users/invite/", form)
       onInvited(res.data)
-      setSent(true)
+      setGeneratedPassword(res.data.generated_password ?? null)
     } catch (e: any) {
-      setError(e?.response?.data?.error ?? "Invite failed. Please try again.")
+      setError(e?.response?.data?.error ?? "Failed to create account. Please try again.")
     } finally {
       setSaving(false)
     }
+  }
+
+  const copyPassword = () => {
+    if (!generatedPassword) return
+    navigator.clipboard.writeText(generatedPassword).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
   }
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm"
       PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ fontWeight: 700, pb: 1, display: "flex", alignItems: "center", gap: 1 }}>
-        <MailOutlineIcon fontSize="small" sx={{ color: "#C41230" }} />
-        Invite User
+        <PersonIcon fontSize="small" sx={{ color: "#C41230" }} />
+        Create User Account
       </DialogTitle>
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}>
-        {sent ? (
-          <Box sx={{ textAlign: "center", py: 3 }}>
-            <CheckIcon sx={{ fontSize: 48, color: "#2e7d32", mb: 1 }} />
-            <Typography variant="h6" fontWeight={700}>Invite sent!</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              A magic link has been emailed to <strong>{form.email}</strong>.
+        {generatedPassword ? (
+          <Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+              <CheckIcon sx={{ color: "#2e7d32" }} />
+              <Typography fontWeight={700}>Account created for {form.email}</Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Share this temporary password with the user. It won't be shown again.
+            </Typography>
+            <Box sx={{
+              display: "flex", alignItems: "center", gap: 1,
+              bgcolor: "#f5f5f5", border: "1px solid #e0e0e0",
+              borderRadius: 2, px: 2, py: 1.5,
+            }}>
+              <Typography sx={{ fontFamily: "monospace", fontSize: "1.1rem", fontWeight: 700, flex: 1, letterSpacing: 1 }}>
+                {generatedPassword}
+              </Typography>
+              <Button size="small" onClick={copyPassword}
+                startIcon={copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <LinkIcon sx={{ fontSize: 14 }} />}
+                sx={{ minWidth: 80, fontWeight: 700, color: copied ? "#2e7d32" : "#C41230" }}>
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: "block" }}>
+              The user can change their password after logging in.
             </Typography>
           </Box>
         ) : (
@@ -169,7 +197,7 @@ function InviteDialog({ open, onClose, onInvited }: {
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
-        {sent ? (
+        {generatedPassword ? (
           <Button variant="contained" onClick={onClose}
             sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#a50e26" } }}>
             Done
@@ -178,9 +206,9 @@ function InviteDialog({ open, onClose, onInvited }: {
           <>
             <Button onClick={onClose} color="inherit" sx={{ color: "#888" }}>Cancel</Button>
             <Button variant="contained" onClick={send} disabled={saving || !form.email.trim()}
-              startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <MailOutlineIcon />}
+              startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <PersonIcon />}
               sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#a50e26" }, fontWeight: 700 }}>
-              Send Invite
+              Create Account
             </Button>
           </>
         )}
@@ -922,7 +950,7 @@ export default function SettingsPage() {
             <Button variant="contained" startIcon={<AddIcon />}
               onClick={() => setInviteOpen(true)}
               sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#a50e26" }, fontWeight: 700, flexShrink: 0 }}>
-              Invite User
+              Create User
             </Button>
           </Box>
 

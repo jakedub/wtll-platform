@@ -240,12 +240,18 @@ class UserInviteView(IsAdminUser, APIView):
     """
     POST /api/auth/users/invite/
     Body: { email, first_name, last_name, is_board_member, is_coach, is_umpire }
-    Creates the user (or updates roles if email exists) and sends a magic link.
+
+    Creates the user (or updates roles if email already exists) and generates
+    a random temporary password. The password is returned once in the response
+    so the admin can share it with the user out-of-band.
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        import secrets
+        import string
+
         err = self._require_admin(request)
         if err:
             return err
@@ -271,23 +277,17 @@ class UserInviteView(IsAdminUser, APIView):
         user.is_coach = bool(request.data.get("is_coach", user.is_coach))
         user.is_umpire = bool(request.data.get("is_umpire", user.is_umpire))
         user.is_active = True
+
+        # Generate a random 12-character password (letters + digits)
+        alphabet = string.ascii_letters + string.digits
+        generated_password = "".join(secrets.choice(alphabet) for _ in range(12))
+        user.set_password(generated_password)
         user.save()
 
-        # Magic-link invite commented out — email provider not configured.
-        # Re-enable when email sending is set up.
-        # from league.models.auth_token import LoginToken
-        # LoginToken.objects.filter(email=email, is_used=False).update(is_used=True)
-        # token_obj = LoginToken.objects.create(email=email)
-        # try:
-        #     _send_magic_link(email, str(token_obj.token), request)
-        # except Exception as exc:
-        #     import logging
-        #     logging.getLogger(__name__).error("Invite magic link send failed: %s", exc)
+        data = _serialize_user(user, include_teams=False)
+        data["generated_password"] = generated_password  # shown once to admin
 
-        return Response(
-            _serialize_user(user, include_teams=False),
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
+        return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
 class UserDetailView(IsAdminUser, APIView):
