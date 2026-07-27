@@ -45,7 +45,6 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
-    "anymail",
     # Local
     "league",
     "drf_spectacular"
