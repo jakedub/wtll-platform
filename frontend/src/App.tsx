@@ -62,6 +62,9 @@ import LoginPage from './pages/LoginPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import StaffRoute from './components/StaffRoute'
+import InternalConsolePage from './pages/InternalConsolePage'
+import JakePage from './pages/JakePage'
 
 // ── Inner component — can call useAppSettings() since it's inside the provider ──
 function AppWithTheme() {
@@ -137,6 +140,9 @@ function AppWithTheme() {
                     <Route path="/locations"             element={<LocationsPage />} />
                     <Route path="/guide"                 element={<GuidePage />} />
                     <Route path="/settings"              element={<SettingsPage />} />
+                    {/* Staff-only hidden pages */}
+                    <Route path="/internal-console" element={<StaffRoute><InternalConsolePage /></StaffRoute>} />
+                    <Route path="/jake"             element={<StaffRoute><JakePage /></StaffRoute>} />
                   </Routes>
                 </AppLayout>
               </ProtectedRoute>

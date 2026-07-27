@@ -4,6 +4,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
+import Divider from '@mui/material/Divider'
 import Grid from '@mui/material/Grid'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -16,7 +17,10 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TrendingDownIcon from '@mui/icons-material/TrendingDown'
+import TerminalIcon from '@mui/icons-material/Terminal'
+import PersonIcon from '@mui/icons-material/Person'
 import client from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 const RED = '#C41230'
 
@@ -75,6 +79,7 @@ function StatCard({
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth()
   const [stats, setStats] = useState<DashStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -255,6 +260,42 @@ export default function DashboardPage() {
                   height: 24,
                 }}
               />
+            ))}
+          </Box>
+        </Paper>
+      )}
+
+      {/* Admin-only quick links */}
+      {user?.is_staff && (
+        <Paper elevation={0} sx={{ border: '1px solid #e4e4e7', borderRadius: 2, p: 2, mt: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <LockOutlinedIcon sx={{ fontSize: 14, color: '#bbb' }} />
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#bbb' }}>
+              Admin
+            </Typography>
+          </Box>
+          <Divider sx={{ mb: 1.5 }} />
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+            {[
+              { to: '/internal-console', label: 'Internal Console', icon: <TerminalIcon sx={{ fontSize: 15 }} /> },
+              { to: '/jake',             label: 'Jake',             icon: <PersonIcon    sx={{ fontSize: 15 }} /> },
+            ].map(({ to, label, icon }) => (
+              <Button
+                key={to}
+                component={Link}
+                to={to}
+                size="small"
+                startIcon={icon}
+                endIcon={<ArrowForwardIcon sx={{ fontSize: 13 }} />}
+                sx={{
+                  fontSize: '0.78rem', color: '#555', fontWeight: 600,
+                  border: '1px solid #e4e4e7', borderRadius: 1.5,
+                  px: 1.5, py: 0.6, textTransform: 'none',
+                  '&:hover': { borderColor: RED, color: RED, bgcolor: `${RED}08` },
+                }}
+              >
+                {label}
+              </Button>
             ))}
           </Box>
         </Paper>

@@ -15,7 +15,7 @@ A full-stack Django + React application for managing youth baseball and softball
 | Database | PostgreSQL (Neon) |
 | Geocoding | Google Maps Geocoding API |
 | District Check | Shapely + GeoPandas (KML boundary file) |
-| Auth | Passwordless magic-link (DRF Token Auth) |
+| Auth | Email + password (DRF Token Auth) |
 | Deployment | Railway (backend) + Vercel (frontend) |
 
 ---
@@ -119,8 +119,10 @@ VITE_API_URL=http://localhost:8000
 
 ## Features
 
-### ✅ Authentication (Magic Link / Passwordless)
-Board members and coaches log in via a one-time email link — no passwords. Links expire after a configurable window (default 15 minutes, adjustable in Site Settings). User roles: Staff (admin), Board Member, Coach, Umpire.
+### ✅ Authentication (Email + Password)
+Board members and coaches log in with email and password. Admins create accounts via Settings → Users; a random 12-character password is generated and shown once at creation. Password reset is admin-initiated (no self-service email flow yet). User roles: Staff (admin), Board Member, Coach, Umpire.
+
+Magic-link code is preserved in `auth.py` and `urls.py` for future re-enable once `gowtll.org` DNS access is available.
 
 ---
 
@@ -300,7 +302,7 @@ Admin-only controls in Settings → Site Settings.
 - Volunteer Sign-Ups
 - Evaluation Sign-Ups
 
-**Authentication** — configure magic link expiry window (15 min → 24 hr).
+**Authentication** — reserved for future auth settings (magic-link expiry config when re-enabled).
 
 **Season** — set the default program year used by pitch log and other pages.
 
@@ -449,7 +451,7 @@ In your service → **Variables**, add:
 | `CORS_ALLOWED_ORIGINS` | Your Vercel frontend URL, e.g. `https://wtll-platform.vercel.app` (fill in after Vercel deploys) |
 | `FRONTEND_URL` | Same Vercel URL |
 | `GOOGLE_MAPS_API_KEY` | Required for address geocoding — Google Cloud Console |
-| `RESEND_API_KEY` | Required for magic-link emails — [resend.com](https://resend.com) |
+| `RESEND_API_KEY` | Reserved for future email features — currently bypassed |
 | `FROM_EMAIL` | e.g. `noreply@yourdomain.com` |
 
 **Generate a public domain**
@@ -516,17 +518,16 @@ CORS_ALLOWED_ORIGINS=https://wtll-platform.vercel.app
 FRONTEND_URL=https://wtll-platform.vercel.app
 ```
 
-Trigger a redeploy on Railway. Magic-link emails will now redirect back to your Vercel URL.
+Trigger a redeploy on Railway. This ensures API calls are accepted from your frontend domain.
 
 ---
 
 ### 5. First Login
 
-With `RESEND_API_KEY` configured:
-1. Open your Vercel URL → request a magic link for your superuser email
-2. Check your inbox → click the link → you're in
-3. Go to **Settings → League Identity** → update name, colors, Little League ID
-4. Go to **Settings → Site Settings** → toggle modules on/off for your league
+1. Open your Vercel URL → log in with the superuser email and password you set via `createsuperuser`
+2. Go to **Settings → League Identity** → update name, colors, Little League ID
+3. Go to **Settings → Site Settings** → toggle modules on/off for your league
+4. Go to **Settings → Users** → create accounts for coaches and board members (password shown once at creation)
 
 Alternatively, use the Django admin at `https://<railway-url>/admin/` with the superuser credentials you created in the console.
 
@@ -550,7 +551,9 @@ See `docs/plans/multi-tenant-migration.md` for the roadmap to a shared multi-ten
 ## Roadmap
 
 ### Completed
-- [x] Magic-link authentication (passwordless)
+- [x] Email + password authentication (admin-created accounts with one-time password)
+- [x] Nav rail / drawer background driven by `primaryColor` from League Identity
+- [x] Post-login redirect to home page
 - [x] User roles (staff, board member, coach, umpire)
 - [x] Player Import (SportsConnect CSV)
 - [x] Address & District Validation (Google Maps + KML)
@@ -583,8 +586,56 @@ See `docs/plans/multi-tenant-migration.md` for the roadmap to a shared multi-ten
 - [x] Platform Guide
 - [x] White-label / multi-league module toggle system
 
-### Planned
+### Known Gaps / Near-Term Backlog
+
+**Draft Room**
+- [ ] Snake Draft Generator — no pick order or round rotation logic
+- [ ] Current Pick Tracker — no "whose turn is it" / round counter
+- [ ] Best Available API — no ranking logic or dedicated endpoint
+- [ ] Suggestion Panel — no UI component
+- [ ] Auto Draft Simulation
+- [ ] Confirmation toast on successful picks
+- [ ] Lock draft UI when `is_complete = True`
+
+**Player Model**
+- [ ] Add `player_id` field (SportsConnect "Player Id" column acknowledged but never stored)
+- [ ] Add jersey number field (`jersey_color` and `jersey_size` exist; number missing)
+
+**Volunteer / Team Linking**
+- [ ] Volunteer → Team link (`VolunteerSignup` ties to Events, not Teams)
+- [ ] Volunteer compliance dashboard
+- [ ] Volunteer status indicators
+
+**Roster / Multi-Team**
+- [ ] `TeamMembership` model — players cannot currently be on multiple teams
+- [ ] Multi-team roster UI
+
+**SportsConnect Integration**
+- [ ] Extract CSV import into a service class (currently inline in the upload view)
+- [ ] Add JSON parser (CSV only today)
+- [ ] Store `player_id` on Player model
+- [ ] Add scheduled sync management command
+
+**Team Assignment Algorithm**
+- [ ] Build algorithm, preview, and admin approval flow — nothing exists
+
+**Polish / Partial Features**
+- [ ] Display assistant coach on read-only team card in `TeamsPage.tsx`
+- [ ] Fix "Generate CSV" export — currently outputs XLSX; rename or implement true CSV
+- [ ] Team strength meter — replace number chip with visual bar/meter
+- [ ] Extract Player Card to reusable component (currently inline in `DraftRoomPage.tsx`)
+- [ ] EvaluationDashboard rename cleanup (`EvaluationsPage` / `EvaluationsHubPage`)
+
+**Infrastructure**
+- [ ] Password reset flow — admin generates temp password per user row + self-service change password form (no email required)
+- [ ] Confirm pandas / `libstdc++.so.6` on Railway — lazy import prevents startup crash but runtime CSV import unconfirmed
+- [ ] Re-enable Resend / magic-link email — code preserved, blocked on `gowtll.org` DNS access
+
+### Longer-Term Planned
 - [ ] Multi-tenant architecture (see `docs/plans/multi-tenant-migration.md`)
 - [ ] Push notifications for schedule changes
-- [ ] Mobile-optimized score entry
+- [ ] Mobile-optimized pitch count entry for field use
+- [ ] Public fundraising donor page (Stripe integration)
+- [ ] Standings and stats (auto-calculated from game results)
+- [ ] GameChanger integration (import game results, pitch counts)
 - [ ] Sponsor management portal
