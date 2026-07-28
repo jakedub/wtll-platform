@@ -118,6 +118,8 @@ const DAYS = [
 
 interface ShopItem { id: string; game: string; publisher: string; booth: string; msrp: string }
 const SHOP_ITEMS: ShopItem[] = [
+  { id: "court",     game: "Court & Shadow",  publisher: "Kobold Press",            booth: "#1909", msrp: ""       },
+  { id: "hdoom",     game: "Hastening Doom",  publisher: "Kobold Press",            booth: "#1909", msrp: ""       },
   { id: "lairs",     game: "Lairs",           publisher: "Kids Table Board Gaming", booth: "#2310", msrp: "$40"    },
   { id: "brumble",   game: "Brumble Quest",   publisher: "Plaid Hat Games",         booth: "#2229", msrp: "$10"    },
   { id: "container", game: "Container",       publisher: "Allplay",                 booth: "#2119", msrp: "$40"    },
