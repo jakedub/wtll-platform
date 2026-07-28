@@ -5,6 +5,7 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --no-input
     startCommand: python manage.py migrate --no-input && gunicorn wtll.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    plan: free
     healthCheckPath: /api/settings/public/
     envVars:
       - key: SECRET_KEY
