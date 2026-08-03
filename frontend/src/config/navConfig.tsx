@@ -81,14 +81,18 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'finance',
-    label: 'Finance',
-    icon: <AttachMoneyIcon />,
-    dashboardPath: '/section/finance',
-    color: '#2e7d32',   // deep green
+    id: 'preseason',
+    label: 'Pre-Season',
+    icon: <AssessmentIcon />,
+    dashboardPath: '/section/preseason',
+    color: '#6a1b9a',   // purple
     items: [
-      { label: 'Budget',      path: '/budget',      icon: <AccountBalanceWalletIcon />, description: 'Annual operating budget — income, expenses, and actuals.' },
-      { label: 'Fundraising', path: '/fundraising', icon: <CampaignIcon />,             description: 'Capital improvement campaigns, plans, and project progress tracker.' },
+      { label: 'Player Import',    path: '/player-import',        icon: <UploadFileIcon />,    description: 'Import players from SportsConnect enrollment CSV.' },
+      { label: 'Eligibility',      path: '/address-validation',   icon: <LocationOnIcon />,    description: 'Geocode addresses and verify district eligibility.' },
+      { label: 'Evaluations',      path: '/evaluations-hub',      icon: <AssessmentIcon />,    description: 'Baseball & softball evals, sign-up events, and print forms.' },
+      { label: 'Team Management',  path: '/team-management',      icon: <ManageAccountsIcon />,description: 'Edit coaches, rosters, and team assignments for all sports.' },
+      { label: 'Baseball Draft',   path: '/draft',                icon: <GavelIcon />,         description: 'Run the baseball player draft by division.' },
+      { label: 'Softball Draft',   path: '/draft?sport=softball', icon: <GavelIcon />,         description: 'Run the softball player draft by division.' },
     ],
   },
   {
@@ -98,11 +102,10 @@ export const NAV_SECTIONS: NavSection[] = [
     dashboardPath: '/section/baseball',
     color: '#1565c0',   // deep blue
     items: [
-      { label: 'Players',         path: '/players',           icon: <PeopleIcon />,          description: 'Roster by division and team — all baseball players.' },
-      { label: 'Pitch Count',     path: '/teams',             icon: <GroupsIcon />,          description: 'Pitch count summary by team and player.' },
-      { label: 'Log Pitches',     path: '/pitch-log',         icon: <SportsBaseballIcon />,  description: 'Log game pitches for AAA and Majors pitchers.' },
-      { label: 'Team Management', path: '/team-management',   icon: <ManageAccountsIcon />,  description: 'Edit coaches, rosters, and team schedules.' },
-      { label: 'All Stars',       path: '/all-stars',         icon: <StarIcon />,            description: 'All Star selections, eligibility, and paperwork.' },
+      { label: 'Players',      path: '/players',     icon: <PeopleIcon />,         description: 'Roster by division and team — all baseball players.' },
+      { label: 'Pitch Count',  path: '/teams',       icon: <GroupsIcon />,         description: 'Pitch count summary by team and player.' },
+      { label: 'Log Pitches',  path: '/pitch-log',   icon: <SportsBaseballIcon />, description: 'Log game pitches for AAA and Majors pitchers.' },
+      { label: 'All Stars',    path: '/all-stars',   icon: <StarIcon />,           description: 'All Star selections, eligibility, and paperwork.' },
     ],
   },
   {
@@ -112,24 +115,20 @@ export const NAV_SECTIONS: NavSection[] = [
     dashboardPath: '/section/softball',
     color: '#d81b60',   // deep pink/magenta
     items: [
-      { label: 'Players',         path: '/players?sport=softball',         icon: <PeopleIcon />,         description: 'Roster by division and team — all softball players.' },
-      { label: 'Log Innings',     path: '/softball-innings',               icon: <SportsBaseballIcon />, description: 'Log innings pitched for Minors and Majors softball.' },
-      { label: 'Team Management', path: '/team-management?sport=softball', icon: <ManageAccountsIcon />, description: 'Edit coaches, rosters, and team schedules.' },
-      { label: 'All Stars',       path: '/all-stars?sport=softball',       icon: <StarIcon />,           description: 'Softball All Star selections and paperwork.' },
+      { label: 'Players',      path: '/players?sport=softball',   icon: <PeopleIcon />,         description: 'Roster by division and team — all softball players.' },
+      { label: 'Log Innings',  path: '/softball-innings',         icon: <SportsBaseballIcon />, description: 'Log innings pitched for Minors and Majors softball.' },
+      { label: 'All Stars',    path: '/all-stars?sport=softball', icon: <StarIcon />,           description: 'Softball All Star selections and paperwork.' },
     ],
   },
   {
-    id: 'preseason',
-    label: 'Pre-Season',
-    icon: <AssessmentIcon />,
-    dashboardPath: '/section/preseason',
-    color: '#6a1b9a',   // purple
+    id: 'finance',
+    label: 'Finance',
+    icon: <AttachMoneyIcon />,
+    dashboardPath: '/section/finance',
+    color: '#2e7d32',   // deep green
     items: [
-      { label: 'Player Import',         path: '/player-import',              icon: <UploadFileIcon />,    description: 'Import players from SportsConnect enrollment CSV.' },
-      { label: 'Eligibility',             path: '/address-validation',         icon: <LocationOnIcon />,    description: 'Geocode addresses and verify district eligibility.' },
-      { label: 'Evaluations',           path: '/evaluations-hub',            icon: <AssessmentIcon />,    description: 'Baseball & softball evals, sign-up events, and print forms.' },
-      { label: 'Baseball Draft',         path: '/draft',                      icon: <GavelIcon />,         description: 'Run the baseball player draft by division.' },
-      { label: 'Softball Draft',         path: '/draft?sport=softball',       icon: <GavelIcon />,         description: 'Run the softball player draft by division.' },
+      { label: 'Budget',      path: '/budget',      icon: <AccountBalanceWalletIcon />, description: 'Annual operating budget — income, expenses, and actuals.' },
+      { label: 'Fundraising', path: '/fundraising', icon: <CampaignIcon />,             description: 'Capital improvement campaigns, plans, and project progress tracker.' },
     ],
   },
   {

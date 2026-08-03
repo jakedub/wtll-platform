@@ -5,10 +5,11 @@ from league.models import Draft, DraftSelection, Team
 class DraftSerializer(serializers.ModelSerializer):
     division_name = serializers.SerializerMethodField(read_only=True)
     selection_count = serializers.SerializerMethodField(read_only=True)
+    program_type = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Draft
-        fields = ["id", "name", "year", "division", "division_name", "is_complete", "created_at", "selection_count"]
+        fields = ["id", "name", "year", "division", "division_name", "program_type", "is_complete", "created_at", "selection_count"]
         read_only_fields = ["created_at"]
 
     def get_division_name(self, obj):
@@ -16,6 +17,11 @@ class DraftSerializer(serializers.ModelSerializer):
 
     def get_selection_count(self, obj):
         return obj.selections.count()
+
+    def get_program_type(self, obj):
+        if obj.division and obj.division.program:
+            return obj.division.program.program_type
+        return None
 
 
 class DraftSelectionSerializer(serializers.ModelSerializer):

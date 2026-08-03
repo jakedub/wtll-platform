@@ -290,6 +290,81 @@ class DraftTeamStatsView(APIView):
         return Response(stats)
 
 
+class FallBallAutoAssignView(APIView):
+    """
+    POST /api/drafts/<id>/auto-assign/
+    Fall Ball only. Assigns every unselected player to the single team
+    in their enrolled division. Players already drafted are skipped.
+    Returns a summary: { assigned, skipped_no_team, skipped_already_drafted }
+    """
+
+    def post(self, request, pk):
+        try:
+            draft = Draft.objects.select_related("division__program").get(pk=pk)
+        except Draft.DoesNotExist:
+            return Response({"error": "Draft not found."}, status=404)
+
+        if not draft.division.program or draft.division.program.program_type != "FALL_BALL":
+            return Response({"error": "Auto-assign is only available for Fall Ball drafts."}, status=400)
+
+        from league.models.player_program_enrollment import PlayerProgramEnrollment
+
+        # Players in this draft's division who haven't been drafted yet
+        already_drafted_ids = set(
+            DraftSelection.objects.filter(draft=draft).values_list("player_id", flat=True)
+        )
+
+        enrollments = PlayerProgramEnrollment.objects.select_related(
+            "player", "division", "team"
+        ).filter(
+            division__program=draft.division.program,
+            player__is_archived=False,
+        ).exclude(player_id__in=already_drafted_ids)
+
+        assigned = 0
+        skipped_no_team = 0
+        skipped_already_drafted = len(already_drafted_ids)
+
+        with transaction.atomic():
+            for enrollment in enrollments:
+                if not enrollment.division:
+                    skipped_no_team += 1
+                    continue
+
+                # Find the one team in this division for the draft year
+                team = Team.objects.filter(
+                    division=enrollment.division,
+                    year=draft.year,
+                    is_active=True,
+                ).first()
+
+                if not team:
+                    skipped_no_team += 1
+                    continue
+
+                DraftSelection.objects.create(
+                    draft=draft,
+                    player=enrollment.player,
+                    team=team,
+                    division=enrollment.division,
+                )
+                # Also update the enrollment team
+                enrollment.team = team
+                enrollment.save(update_fields=["team"])
+                assigned += 1
+
+        return Response({
+            "assigned": assigned,
+            "skipped_no_team": skipped_no_team,
+            "skipped_already_drafted": skipped_already_drafted,
+            "message": (
+                f"Auto-assigned {assigned} players. "
+                f"{skipped_no_team} skipped (no team found). "
+                f"{skipped_already_drafted} already drafted."
+            ),
+        })
+
+
 class MarkDraftCompleteView(APIView):
     """POST /api/drafts/<id>/complete/"""
 

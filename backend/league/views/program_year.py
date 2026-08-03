@@ -80,7 +80,13 @@ class StartProgramYearView(APIView):
                 skipped.append({"type": ptype, "reason": "Unknown program type"})
                 continue
 
-            sport = "softball" if ptype in SOFTBALL_PROGRAM_TYPES else "baseball"
+            # Fall Ball is multi-sport; all others use a single sport
+            if ptype == "FALL_BALL":
+                sport = "both"
+            elif ptype in SOFTBALL_PROGRAM_TYPES:
+                sport = "softball"
+            else:
+                sport = "baseball"
             name  = f"{year} {PROGRAM_TYPE_LABELS[ptype]}"
 
             prog, was_created = Program.objects.get_or_create(
@@ -95,11 +101,15 @@ class StartProgramYearView(APIView):
 
             created_programs.append(prog.name)
 
-            # Create default divisions
+            # Create default divisions and link them to this program
             for div_name, div_sport in DEFAULT_DIVISIONS.get(ptype, []):
-                _, div_created = Division.objects.get_or_create(name=div_name)
+                division, div_created = Division.objects.get_or_create(name=div_name)
                 if div_created:
                     created_divisions.append(div_name)
+                # Always ensure the program FK is set (backfills existing unlinked divisions too)
+                if division.program_id != prog.pk:
+                    division.program = prog
+                    division.save(update_fields=["program"])
 
         # Deactivate all currently active players
         deactivated = Player.objects.filter(is_active=True, is_archived=False).update(is_active=False)

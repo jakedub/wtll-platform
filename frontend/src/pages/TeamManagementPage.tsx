@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom"
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Collapse,
   Dialog, DialogActions, DialogContent, DialogTitle, Divider,
-  FormControl, InputLabel, MenuItem, OutlinedInput, Paper, Select,
+  FormControl, FormControlLabel, Checkbox, InputLabel, MenuItem, OutlinedInput, Paper, Select,
   TextField, Tooltip, Typography,
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
@@ -32,8 +32,13 @@ interface TeamPlayer { id: number; first_name: string; last_name: string; jersey
 interface TeamData { id: number; name: string; year: number; division: number | null; division_name: string | null; coach: string; assistant_coach: string; home_location: string; jersey_color: string; sport: string; program_type: string | null; program_label: string | null; roster: TeamPlayer[] }
 interface FreeAgent { id: number; first_name: string; last_name: string; date_of_birth: string | null }
 
-async function getTeams(sport?: string, year?: number): Promise<TeamData[]> {
-  const res = await client.get("/team-manage/", { params: { ...(sport ? { sport } : {}), ...(year ? { year } : {}) } })
+async function getTeams(sport?: string, year?: number, programType?: string, hideClosed?: boolean): Promise<TeamData[]> {
+  const params: Record<string, any> = {}
+  if (sport) params.sport = sport
+  if (year) params.year = year
+  if (programType && programType !== "ALL") params.program_type = programType
+  params.hide_closed = hideClosed !== false ? "true" : "false"
+  const res = await client.get("/team-manage/", { params })
   return res.data ?? []
 }
 async function createTeam(data: any): Promise<TeamData> {
@@ -260,6 +265,7 @@ export default function TeamManagementPage() {
   // Filters
   const [programFilter, setProgramFilter] = useState("ALL")
   const [teamFilter, setTeamFilter] = useState<string[]>([])
+  const [hideClosed, setHideClosed] = useState(true)
 
   // Add-player dialog
   const [assignDialog, setAssignDialog] = useState<{ teamId: number; divisionId: number | null } | null>(null)
@@ -269,10 +275,10 @@ export default function TeamManagementPage() {
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    try { setTeams(await getTeams(sportParam, year)) }
+    try { setTeams(await getTeams(sportParam, year, programFilter, hideClosed)) }
     catch { setError("Failed to load teams.") }
     finally { setLoading(false) }
-  }, [sportParam, year])
+  }, [sportParam, year, programFilter, hideClosed])
 
   useEffect(() => { load() }, [load])
 
@@ -323,9 +329,8 @@ export default function TeamManagementPage() {
     catch (err: any) { setError(err?.response?.data?.error ?? "Delete failed.") }
   }
 
-  // Apply client-side filters
+  // Apply client-side team name filter only (program type and hide_closed are server-side)
   const filteredTeams = teams.filter(t => {
-    if (programFilter !== "ALL" && t.program_type !== programFilter) return false
     if (teamFilter.length > 0 && !teamFilter.includes(t.name)) return false
     return true
   })
@@ -403,7 +408,19 @@ export default function TeamManagementPage() {
           })}
         </Box>
 
-        <Typography sx={{ fontSize: "0.8rem", color: "#aaa", ml: "auto" }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={hideClosed}
+              onChange={e => setHideClosed(e.target.checked)}
+              size="small"
+              sx={{ color: "#aaa", "&.Mui-checked": { color: RED } }}
+            />
+          }
+          label={<Typography sx={{ fontSize: "0.78rem", color: "#666" }}>Hide closed seasons</Typography>}
+          sx={{ ml: "auto", mr: 0 }}
+        />
+        <Typography sx={{ fontSize: "0.8rem", color: "#aaa" }}>
           {filteredTeams.length} of {teams.length} teams
         </Typography>
       </Box>

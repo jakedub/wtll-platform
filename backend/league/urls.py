@@ -63,6 +63,7 @@ from league.views.draft import (
     DraftTeamStatsView,
     MarkDraftCompleteView,
     DraftExportView,
+    FallBallAutoAssignView,
 )
 from league.views.evaluations import (
     EvaluationListCreateView,
@@ -257,6 +258,7 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     path("drafts/<int:pk>/team-stats/", DraftTeamStatsView.as_view(), name="draft-team-stats"),
     path("drafts/<int:pk>/complete/", MarkDraftCompleteView.as_view(), name="draft-complete"),
     path("drafts/<int:pk>/export/", DraftExportView.as_view(), name="draft-export"),
+    path("drafts/<int:pk>/auto-assign/", FallBallAutoAssignView.as_view(), name="draft-auto-assign"),
 
     # Evaluations
     path("evaluations/import/", EvaluationImportView.as_view(), name="evaluation-import"),

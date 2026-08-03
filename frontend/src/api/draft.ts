@@ -49,6 +49,11 @@ export async function markDraftComplete(draftId: number): Promise<Draft> {
   return unwrap<Draft>(res)
 }
 
+export async function autoAssignFallBall(draftId: number): Promise<{ assigned: number; skipped_no_team: number; skipped_already_drafted: number; message: string }> {
+  const res = await client.post(`/drafts/${draftId}/auto-assign/`)
+  return unwrap(res)
+}
+
 export function getDraftExportURL(draftId: number): string {
   const base = (client.defaults.baseURL ?? "").replace(/\/$/, "")
   return `${base}/drafts/${draftId}/export/`

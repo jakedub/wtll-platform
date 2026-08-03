@@ -103,6 +103,11 @@ class TeamManageListView(APIView):
         if program_type and program_type != "ALL":
             qs = qs.filter(division__program__program_type=program_type)
 
+        # Hide teams whose program is closed (default: hide)
+        hide_closed = request.query_params.get("hide_closed", "true").lower()
+        if hide_closed == "true":
+            qs = qs.exclude(division__program__season_closed=True)
+
         return Response(TeamManageSerializer(qs.order_by("division__name", "name"), many=True).data)
 
 

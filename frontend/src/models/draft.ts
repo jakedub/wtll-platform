@@ -4,6 +4,7 @@ export interface Draft {
   year: number
   division: number
   division_name: string | null
+  program_type: string | null
   is_complete: boolean
   created_at: string
   selection_count: number

@@ -39,6 +39,7 @@ import {
   getTeamStats,
   markDraftComplete,
   getDraftExportURL,
+  autoAssignFallBall,
 } from "../api/draft"
 import { getTeams } from "../api/teams"
 import type { Draft, DraftState, DraftPlayerEntry, DraftTeam, TeamStats } from "../models/draft"
@@ -341,6 +342,9 @@ export default function DraftRoomPage() {
   const [drafting, setDrafting] = useState(false)
   const [teamSetupOpen, setTeamSetupOpen] = useState(false)
   const [completeDialog, setCompleteDialog] = useState(false)
+  const [autoAssignDialog, setAutoAssignDialog] = useState(false)
+  const [autoAssigning, setAutoAssigning] = useState(false)
+  const [autoAssignResult, setAutoAssignResult] = useState<string | null>(null)
 
   // Tier + role filter for available pool
   const [tierFilter, setTierFilter] = useState<number | "">("")
@@ -396,6 +400,20 @@ export default function DraftRoomPage() {
       setCompleteDialog(false)
     } catch {
       setError("Failed to mark draft complete.")
+    }
+  }
+
+  const handleAutoAssign = async () => {
+    setAutoAssigning(true)
+    try {
+      const result = await autoAssignFallBall(draftId)
+      await load()
+      setAutoAssignResult(result.message)
+    } catch {
+      setError("Auto-assign failed.")
+    } finally {
+      setAutoAssigning(false)
+      setAutoAssignDialog(false)
     }
   }
 
@@ -456,6 +474,16 @@ export default function DraftRoomPage() {
           <Button size="small" variant="outlined" component="a" href={exportURL} download startIcon={<DownloadIcon />} color="inherit">
             Export XLSX
           </Button>
+          {!draft.is_complete && draft.program_type === "FALL_BALL" && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setAutoAssignDialog(true)}
+              sx={{ borderColor: "#c2410c", color: "#c2410c", "&:hover": { bgcolor: "#fff7ed", borderColor: "#c2410c" } }}
+            >
+              Auto Assign
+            </Button>
+          )}
           {!draft.is_complete && (
             <Button
               size="small"
@@ -632,6 +660,43 @@ export default function DraftRoomPage() {
         onSave={handleTeamsSaved}
         onClose={() => setTeamSetupOpen(false)}
       />
+
+      {/* Auto-assign result alert */}
+      {autoAssignResult && (
+        <Dialog open onClose={() => setAutoAssignResult(null)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontWeight: 700 }}>Auto Assign Complete</DialogTitle>
+          <DialogContent>
+            <Typography sx={{ fontSize: "0.875rem", color: "#555" }}>{autoAssignResult}</Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2 }}>
+            <Button variant="contained" onClick={() => setAutoAssignResult(null)} sx={{ bgcolor: "#c2410c", "&:hover": { bgcolor: "#9a3412" } }}>
+              Done
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {/* Auto-assign confirmation */}
+      <Dialog open={autoAssignDialog} onClose={() => setAutoAssignDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Auto Assign Players?</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: "0.875rem", color: "#555" }}>
+            This will assign all unassigned players to their division team based on enrollment. Players already drafted will be skipped. You can adjust assignments in Team Management afterward.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setAutoAssignDialog(false)} color="inherit">Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={autoAssigning}
+            onClick={handleAutoAssign}
+            startIcon={autoAssigning ? <CircularProgress size={14} color="inherit" /> : undefined}
+            sx={{ bgcolor: "#c2410c", "&:hover": { bgcolor: "#9a3412" } }}
+          >
+            {autoAssigning ? "Assigning…" : "Auto Assign"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Mark complete confirmation */}
       <Dialog open={completeDialog} onClose={() => setCompleteDialog(false)} maxWidth="xs" fullWidth>

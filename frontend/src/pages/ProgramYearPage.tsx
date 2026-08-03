@@ -226,7 +226,7 @@ export default function ProgramYearPage() {
                       <Typography sx={{ fontWeight: 700, fontSize: "0.82rem", color: p.season_closed ? "#999" : color }}>{p.program_type_label}</Typography>
                     </Box>
                     <Typography sx={{ fontSize: "0.72rem", color: "#888" }}>
-                      {p.sport === "softball" ? "Softball" : "Baseball"}
+                      {p.sport === "softball" ? "Softball" : p.sport === "both" ? "Baseball & Softball" : "Baseball"}
                     </Typography>
                     <Box sx={{ display: "flex", gap: 0.5, mt: 0.75, flexWrap: "wrap", alignItems: "center" }}>
                       {!p.is_active && <Chip label="Inactive" size="small" sx={{ height: 16, fontSize: "0.62rem", bgcolor: "#f4f4f5", color: "#aaa" }} />}
