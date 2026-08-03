@@ -14,6 +14,104 @@ from league.models.program import Program, PROGRAM_TYPES, DEFAULT_DIVISIONS, SOF
 PROGRAM_TYPE_LABELS = dict(PROGRAM_TYPES)
 
 
+# ── Division serializer ───────────────────────────────────────────────────────
+
+class DivisionSerializer(serializers.ModelSerializer):
+    sport = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Division
+        fields = ["id", "name", "sport", "is_calendar_only"]
+
+    def get_sport(self, obj):
+        if obj.program:
+            return obj.program.sport
+        name = obj.name.lower()
+        return "softball" if "softball" in name else "baseball"
+
+
+# ── Division CRUD under a program ─────────────────────────────────────────────
+
+class ProgramDivisionListView(APIView):
+    """
+    GET  /api/program-years/<program_id>/divisions/  — list divisions for program
+    POST /api/program-years/<program_id>/divisions/  — create a division
+    """
+
+    def _get_program(self, pk):
+        try:
+            return Program.objects.get(pk=pk)
+        except Program.DoesNotExist:
+            return None
+
+    def get(self, request, program_id):
+        program = self._get_program(program_id)
+        if not program:
+            return Response({"error": "Program not found."}, status=404)
+        divisions = Division.objects.filter(program=program).order_by("name")
+        return Response(DivisionSerializer(divisions, many=True).data)
+
+    def post(self, request, program_id):
+        program = self._get_program(program_id)
+        if not program:
+            return Response({"error": "Program not found."}, status=404)
+
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return Response({"error": "name is required."}, status=400)
+
+        if Division.objects.filter(name=name).exists():
+            return Response({"error": f"A division named '{name}' already exists."}, status=400)
+
+        division = Division.objects.create(name=name, program=program)
+        return Response(DivisionSerializer(division).data, status=status.HTTP_201_CREATED)
+
+
+class ProgramDivisionDetailView(APIView):
+    """
+    PATCH  /api/program-years/<program_id>/divisions/<div_id>/  — rename
+    DELETE /api/program-years/<program_id>/divisions/<div_id>/  — delete (blocked if teams exist)
+    """
+
+    def _get_division(self, program_id, div_id):
+        try:
+            return Division.objects.select_related("program").get(pk=div_id, program_id=program_id)
+        except Division.DoesNotExist:
+            return None
+
+    def patch(self, request, program_id, div_id):
+        division = self._get_division(program_id, div_id)
+        if not division:
+            return Response({"error": "Division not found."}, status=404)
+
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return Response({"error": "name is required."}, status=400)
+
+        if Division.objects.filter(name=name).exclude(pk=div_id).exists():
+            return Response({"error": f"A division named '{name}' already exists."}, status=400)
+
+        division.name = name
+        division.save(update_fields=["name"])
+        return Response(DivisionSerializer(division).data)
+
+    def delete(self, request, program_id, div_id):
+        division = self._get_division(program_id, div_id)
+        if not division:
+            return Response({"error": "Division not found."}, status=404)
+
+        from league.models.teams import Team
+        team_count = Team.objects.filter(division=division).count()
+        if team_count > 0:
+            return Response(
+                {"error": f"Cannot delete — {team_count} team(s) are linked to this division. Reassign or delete those teams first."},
+                status=400,
+            )
+
+        division.delete()
+        return Response({"deleted": True})
+
+
 class ProgramYearSerializer(serializers.ModelSerializer):
     program_type_label = serializers.SerializerMethodField()
 

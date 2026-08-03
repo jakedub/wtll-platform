@@ -28,7 +28,7 @@ from league.views.umpire import UmpireGameListView, UmpireSignupCreateView, Umpi
 from league.views.allstars import AllStarListCreateView, AllStarDetailView, AllStarSummaryView
 from league.views.allstar_forms import AllStarTVFView, AllStarEnrollmentFormView, AllStarSoftballEnrollmentFormView
 from league.views.eligibility_recheck import EligibilityRecheckView
-from league.views.program_year import ProgramYearListView, StartProgramYearView, ProgramYearAvailableTypesView, ProgramCloseView
+from league.views.program_year import ProgramYearListView, StartProgramYearView, ProgramYearAvailableTypesView, ProgramCloseView, ProgramDivisionListView, ProgramDivisionDetailView
 from league.views.evaluation_event import (
     EvaluationEventListCreateView, EvaluationEventDetailView,
     EvaluationEventRegenerateSlots, EvaluationEventPublicConfigView,
@@ -194,6 +194,8 @@ urlpatterns = [
     path("program-years/types/",  ProgramYearAvailableTypesView.as_view(),name="program-year-types"),
     path("program-years/<int:pk>/close/",  ProgramCloseView.as_view(), {"action": "close"},  name="program-close"),
     path("program-years/<int:pk>/reopen/", ProgramCloseView.as_view(), {"action": "reopen"}, name="program-reopen"),
+    path("program-years/<int:program_id>/divisions/", ProgramDivisionListView.as_view(), name="program-divisions"),
+    path("program-years/<int:program_id>/divisions/<int:div_id>/", ProgramDivisionDetailView.as_view(), name="program-division-detail"),
 
     # Team Calendar subscriptions (ICS URL management)
     path("team-calendars-manage/", TeamCalendarListCreateView.as_view(), name="team-calendar-list"),

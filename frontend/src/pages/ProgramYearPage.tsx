@@ -1,20 +1,28 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import {
   Alert, Box, Button, Checkbox, Chip, CircularProgress,
-  Dialog, DialogActions, DialogContent, DialogTitle,
-  Divider, FormControlLabel, Paper, TextField, Typography,
+  Collapse, Dialog, DialogActions, DialogContent, DialogTitle,
+  Divider, FormControl, IconButton,
+  MenuItem, Paper, Select, TextField, Tooltip, Typography,
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined"
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined"
+import EditIcon from "@mui/icons-material/Edit"
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
+import SaveIcon from "@mui/icons-material/Save"
+import CancelIcon from "@mui/icons-material/Cancel"
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 import client from "../api/client"
 
 const RED = "#C41230"
 
 interface ProgramInfo { id: number; name: string; program_type: string; program_type_label: string; season_year: number; sport: string; is_active: boolean; season_closed: boolean; closed_at: string | null }
 interface YearGroup { year: number; programs: ProgramInfo[] }
+interface DivisionInfo { id: number; name: string; sport: string; is_calendar_only: boolean }
 
 const ALL_TYPES = [
   { value: "RECREATION",    label: "Recreation",    desc: "Spring regular season (Baseball + Softball)" },
@@ -37,6 +45,156 @@ async function getYears(): Promise<YearGroup[]> {
 async function startYear(year: number, programTypes: string[]): Promise<any> {
   const res = await client.post("/program-years/start/", { year, program_types: programTypes })
   return res.data
+}
+
+// ── Division Panel ────────────────────────────────────────────────────────────
+
+function DivisionPanel({ programId }: { programId: number }) {
+  const [divisions, setDivisions] = useState<DivisionInfo[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Add form
+  const [addName, setAddName] = useState("")
+  const [addSport, setAddSport] = useState<"baseball" | "softball">("baseball")
+  const [adding, setAdding] = useState(false)
+
+  // Rename state: divisionId → draft name
+  const [renaming, setRenaming] = useState<Record<number, string>>({})
+  const [saving, setSaving] = useState<number | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await client.get(`/program-years/${programId}/divisions/`)
+      setDivisions(res.data ?? [])
+    } catch { setError("Failed to load divisions.") }
+    finally { setLoading(false) }
+  }, [programId])
+
+  useEffect(() => { load() }, [load])
+
+  const handleAdd = async () => {
+    if (!addName.trim()) return
+    setAdding(true); setError(null)
+    try {
+      await client.post(`/program-years/${programId}/divisions/`, { name: addName.trim(), sport: addSport })
+      setAddName("")
+      await load()
+    } catch (e: any) {
+      setError(e?.response?.data?.error ?? "Failed to add division.")
+    } finally { setAdding(false) }
+  }
+
+  const handleRename = async (divId: number) => {
+    const name = (renaming[divId] ?? "").trim()
+    if (!name) return
+    setSaving(divId); setError(null)
+    try {
+      await client.patch(`/program-years/${programId}/divisions/${divId}/`, { name })
+      setRenaming(prev => { const n = { ...prev }; delete n[divId]; return n })
+      await load()
+    } catch (e: any) {
+      setError(e?.response?.data?.error ?? "Failed to rename division.")
+    } finally { setSaving(null) }
+  }
+
+  const handleDelete = async (div: DivisionInfo) => {
+    if (!confirm(`Delete division "${div.name}"? This cannot be undone.`)) return
+    setError(null)
+    try {
+      await client.delete(`/program-years/${programId}/divisions/${div.id}/`)
+      await load()
+    } catch (e: any) {
+      setError(e?.response?.data?.error ?? "Failed to delete division.")
+    }
+  }
+
+  if (loading) return <Box sx={{ py: 1.5, display: "flex", justifyContent: "center" }}><CircularProgress size={18} sx={{ color: RED }} /></Box>
+
+  return (
+    <Box sx={{ pt: 1 }}>
+      {error && <Alert severity="error" sx={{ mb: 1, py: 0.5, fontSize: "0.78rem" }} onClose={() => setError(null)}>{error}</Alert>}
+
+      {divisions.length === 0 && !loading && (
+        <Typography sx={{ fontSize: "0.78rem", color: "#bbb", mb: 1 }}>No divisions yet.</Typography>
+      )}
+
+      {divisions.map(div => (
+        <Box key={div.id} sx={{ display: "flex", alignItems: "center", gap: 0.75, py: 0.5, borderBottom: "1px solid #f0f0f0" }}>
+          {renaming[div.id] !== undefined ? (
+            <>
+              <TextField
+                size="small"
+                value={renaming[div.id]}
+                onChange={e => setRenaming(prev => ({ ...prev, [div.id]: e.target.value }))}
+                onKeyDown={e => { if (e.key === "Enter") handleRename(div.id); if (e.key === "Escape") setRenaming(prev => { const n = { ...prev }; delete n[div.id]; return n }) }}
+                autoFocus
+                sx={{ flex: 1, "& input": { fontSize: "0.8rem", py: 0.5 } }}
+              />
+              <Tooltip title="Save">
+                <IconButton size="small" onClick={() => handleRename(div.id)} disabled={saving === div.id}>
+                  {saving === div.id ? <CircularProgress size={13} /> : <SaveIcon sx={{ fontSize: 14, color: "#2e7d32" }} />}
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Cancel">
+                <IconButton size="small" onClick={() => setRenaming(prev => { const n = { ...prev }; delete n[div.id]; return n })}>
+                  <CancelIcon sx={{ fontSize: 14, color: "#aaa" }} />
+                </IconButton>
+              </Tooltip>
+            </>
+          ) : (
+            <>
+              <Typography sx={{ flex: 1, fontSize: "0.8rem" }}>{div.name}</Typography>
+              <Chip
+                label={div.sport === "softball" ? "Softball" : "Baseball"}
+                size="small"
+                sx={{ height: 16, fontSize: "0.62rem", bgcolor: div.sport === "softball" ? "#fce4ec" : "#e3f2fd", color: div.sport === "softball" ? "#880e4f" : "#0d47a1" }}
+              />
+              <Tooltip title="Rename">
+                <IconButton size="small" onClick={() => setRenaming(prev => ({ ...prev, [div.id]: div.name }))}>
+                  <EditIcon sx={{ fontSize: 13, color: "#ccc", "&:hover": { color: RED } }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Delete">
+                <IconButton size="small" onClick={() => handleDelete(div)}>
+                  <DeleteOutlineIcon sx={{ fontSize: 13, color: "#ccc", "&:hover": { color: RED } }} />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+        </Box>
+      ))}
+
+      {/* Add row */}
+      <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 1.25 }}>
+        <TextField
+          size="small"
+          placeholder="Division name"
+          value={addName}
+          onChange={e => setAddName(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") handleAdd() }}
+          sx={{ flex: 1, "& input": { fontSize: "0.8rem", py: 0.6 } }}
+        />
+        <FormControl size="small" sx={{ minWidth: 100 }}>
+          <Select value={addSport} onChange={e => setAddSport(e.target.value as "baseball" | "softball")} sx={{ fontSize: "0.78rem" }}>
+            <MenuItem value="baseball" sx={{ fontSize: "0.8rem" }}>Baseball</MenuItem>
+            <MenuItem value="softball" sx={{ fontSize: "0.8rem" }}>Softball</MenuItem>
+          </Select>
+        </FormControl>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={adding || !addName.trim()}
+          onClick={handleAdd}
+          startIcon={adding ? <CircularProgress size={12} color="inherit" /> : <AddIcon sx={{ fontSize: 14 }} />}
+          sx={{ bgcolor: RED, "&:hover": { bgcolor: "#960E24" }, fontSize: "0.75rem", py: 0.6, whiteSpace: "nowrap" }}
+        >
+          Add
+        </Button>
+      </Box>
+    </Box>
+  )
 }
 
 // ── Start Year Dialog ─────────────────────────────────────────────────────────
@@ -140,6 +298,82 @@ function StartYearDialog({ open, onClose, onStarted }: { open: boolean; onClose:
   )
 }
 
+// ── Program Card ──────────────────────────────────────────────────────────────
+
+function ProgramCard({ program: p, color, toggling, onToggleClose }: {
+  program: ProgramInfo
+  color: string
+  toggling: number | null
+  onToggleClose: (p: ProgramInfo) => void
+}) {
+  const [divisionsOpen, setDivisionsOpen] = useState(false)
+
+  return (
+    <Box sx={{
+      border: `1px solid ${p.season_closed ? "#e4e4e7" : color + "30"}`,
+      borderRadius: 1.5, p: 1.5,
+      bgcolor: p.season_closed ? "#fafafa" : `${color}06`,
+      opacity: p.season_closed ? 0.85 : 1,
+    }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
+        <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: p.season_closed ? "#ccc" : color, flexShrink: 0 }} />
+        <Typography sx={{ fontWeight: 700, fontSize: "0.82rem", color: p.season_closed ? "#999" : color }}>{p.program_type_label}</Typography>
+      </Box>
+      <Typography sx={{ fontSize: "0.72rem", color: "#888" }}>
+        {p.sport === "softball" ? "Softball" : p.sport === "both" ? "Baseball & Softball" : "Baseball"}
+      </Typography>
+      <Box sx={{ display: "flex", gap: 0.5, mt: 0.75, flexWrap: "wrap", alignItems: "center" }}>
+        {!p.is_active && <Chip label="Inactive" size="small" sx={{ height: 16, fontSize: "0.62rem", bgcolor: "#f4f4f5", color: "#aaa" }} />}
+        {p.season_closed && (
+          <Chip
+            label="Season Closed"
+            size="small"
+            icon={<LockOutlinedIcon sx={{ fontSize: "0.7rem !important" }} />}
+            sx={{ height: 18, fontSize: "0.62rem", bgcolor: "#fff8e1", color: "#b45309", fontWeight: 700 }}
+          />
+        )}
+      </Box>
+
+      <Button
+        size="small"
+        startIcon={p.season_closed ? <LockOpenOutlinedIcon sx={{ fontSize: 13 }} /> : <LockOutlinedIcon sx={{ fontSize: 13 }} />}
+        disabled={toggling === p.id}
+        onClick={() => onToggleClose(p)}
+        sx={{
+          mt: 1, width: "100%",
+          fontSize: "0.68rem", py: 0.3, px: 1,
+          borderColor: p.season_closed ? "#2e7d32" : "#aaa",
+          color: p.season_closed ? "#2e7d32" : "#777",
+          "&:hover": {
+            borderColor: p.season_closed ? "#1b5e20" : "#C41230",
+            color: p.season_closed ? "#1b5e20" : "#C41230",
+            bgcolor: p.season_closed ? "rgba(46,125,50,0.05)" : "rgba(196,18,48,0.05)",
+          },
+        }}
+        variant="outlined"
+      >
+        {toggling === p.id ? "…" : p.season_closed ? "Re-open Season" : "Close Season"}
+      </Button>
+
+      {/* Divisions toggle */}
+      <Button
+        size="small"
+        fullWidth
+        endIcon={divisionsOpen ? <ExpandLessIcon sx={{ fontSize: 14 }} /> : <ExpandMoreIcon sx={{ fontSize: 14 }} />}
+        onClick={() => setDivisionsOpen(v => !v)}
+        sx={{ mt: 0.75, fontSize: "0.68rem", color: "#888", justifyContent: "space-between", px: 0.5, py: 0.3 }}
+      >
+        Divisions
+      </Button>
+
+      <Collapse in={divisionsOpen}>
+        <Divider sx={{ mt: 0.5, mb: 0.5 }} />
+        <DivisionPanel programId={p.id} />
+      </Collapse>
+    </Box>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProgramYearPage() {
@@ -215,51 +449,13 @@ export default function ProgramYearPage() {
               {yg.programs.map(p => {
                 const color = TYPE_COLORS[p.program_type] ?? "#555"
                 return (
-                  <Box key={p.id} sx={{
-                    border: `1px solid ${p.season_closed ? "#e4e4e7" : color + "30"}`,
-                    borderRadius: 1.5, p: 1.5,
-                    bgcolor: p.season_closed ? "#fafafa" : `${color}06`,
-                    opacity: p.season_closed ? 0.85 : 1,
-                  }}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: p.season_closed ? "#ccc" : color, flexShrink: 0 }} />
-                      <Typography sx={{ fontWeight: 700, fontSize: "0.82rem", color: p.season_closed ? "#999" : color }}>{p.program_type_label}</Typography>
-                    </Box>
-                    <Typography sx={{ fontSize: "0.72rem", color: "#888" }}>
-                      {p.sport === "softball" ? "Softball" : p.sport === "both" ? "Baseball & Softball" : "Baseball"}
-                    </Typography>
-                    <Box sx={{ display: "flex", gap: 0.5, mt: 0.75, flexWrap: "wrap", alignItems: "center" }}>
-                      {!p.is_active && <Chip label="Inactive" size="small" sx={{ height: 16, fontSize: "0.62rem", bgcolor: "#f4f4f5", color: "#aaa" }} />}
-                      {p.season_closed && (
-                        <Chip
-                          label="Season Closed"
-                          size="small"
-                          icon={<LockOutlinedIcon sx={{ fontSize: "0.7rem !important" }} />}
-                          sx={{ height: 18, fontSize: "0.62rem", bgcolor: "#fff8e1", color: "#b45309", fontWeight: 700 }}
-                        />
-                      )}
-                    </Box>
-                    <Button
-                      size="small"
-                      startIcon={p.season_closed ? <LockOpenOutlinedIcon sx={{ fontSize: 13 }} /> : <LockOutlinedIcon sx={{ fontSize: 13 }} />}
-                      disabled={toggling === p.id}
-                      onClick={() => handleToggleClose(p)}
-                      sx={{
-                        mt: 1, width: "100%",
-                        fontSize: "0.68rem", py: 0.3, px: 1,
-                        borderColor: p.season_closed ? "#2e7d32" : "#aaa",
-                        color: p.season_closed ? "#2e7d32" : "#777",
-                        "&:hover": {
-                          borderColor: p.season_closed ? "#1b5e20" : "#C41230",
-                          color: p.season_closed ? "#1b5e20" : "#C41230",
-                          bgcolor: p.season_closed ? "rgba(46,125,50,0.05)" : "rgba(196,18,48,0.05)",
-                        },
-                      }}
-                      variant="outlined"
-                    >
-                      {toggling === p.id ? "…" : p.season_closed ? "Re-open Season" : "Close Season"}
-                    </Button>
-                  </Box>
+                  <ProgramCard
+                    key={p.id}
+                    program={p}
+                    color={color}
+                    toggling={toggling}
+                    onToggleClose={handleToggleClose}
+                  />
                 )
               })}
             </Box>
