@@ -319,3 +319,71 @@ class ProgramYearDeleteView(APIView):
             "enrollments_deleted": enrollment_count,
             "teams_deleted": team_count,
         })
+
+
+class ProgramPipelineStatusView(APIView):
+    """
+    GET /api/program-years/<pk>/pipeline-status/
+    Returns step completion data for the season pipeline UI.
+    """
+
+    def get(self, request, pk):
+        try:
+            program = Program.objects.get(pk=pk)
+        except Program.DoesNotExist:
+            return Response({"error": "Program not found."}, status=404)
+
+        from league.models.player_program_enrollment import PlayerProgramEnrollment
+        from league.models.teams import Team
+        from league.models.evaluation import Evaluation
+        from league.models.draft import Draft
+
+        # Divisions linked to this program
+        division_count = Division.objects.filter(program=program).count()
+
+        # Teams for this program year (via division → program)
+        team_qs = Team.objects.filter(division__program=program, year=program.season_year)
+        team_count = team_qs.count()
+
+        # Players enrolled in this program
+        player_count = PlayerProgramEnrollment.objects.filter(program=program).count()
+
+        # Evaluation events for this season year
+        try:
+            from league.models.evaluation_event import EvaluationEvent
+            eval_count = EvaluationEvent.objects.filter(season_year=program.season_year).count()
+        except Exception:
+            eval_count = 0
+
+        # Drafts for divisions in this program
+        draft_qs = Draft.objects.filter(division__program=program)
+        draft_count = draft_qs.count()
+
+        # Drafts that are complete
+        draft_complete_count = draft_qs.filter(is_complete=True).count()
+        all_drafts_complete = draft_count > 0 and draft_complete_count == draft_count
+
+        # Games scheduled for teams in this program
+        try:
+            from league.models.team_calendar import TeamCalendarEvent
+            team_ids = list(team_qs.values_list("id", flat=True))
+            schedule_count = TeamCalendarEvent.objects.filter(team_id__in=team_ids).count()
+        except Exception:
+            schedule_count = 0
+
+        return Response({
+            "program_id": program.id,
+            "program_type": program.program_type,
+            "season_year": program.season_year,
+            "season_closed": program.season_closed,
+            "steps": {
+                "divisions":      {"done": division_count > 0,       "count": division_count},
+                "teams":          {"done": team_count > 0,            "count": team_count},
+                "players":        {"done": player_count > 0,          "count": player_count},
+                "evaluations":    {"done": eval_count > 0,            "count": eval_count},
+                "draft":          {"done": draft_count > 0,           "count": draft_count},
+                "draft_complete": {"done": all_drafts_complete,       "count": draft_complete_count},
+                "schedule":       {"done": schedule_count > 0,        "count": schedule_count},
+                "closed":         {"done": program.season_closed},
+            },
+        })

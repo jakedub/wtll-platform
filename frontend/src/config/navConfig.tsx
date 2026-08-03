@@ -14,6 +14,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn'
 import BadgeIcon from '@mui/icons-material/Badge'
 import StorefrontIcon from '@mui/icons-material/Storefront'
 import AssessmentIcon from '@mui/icons-material/Assessment'
+import TimelineIcon from '@mui/icons-material/Timeline'
 import GavelIcon from '@mui/icons-material/Gavel'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
@@ -87,6 +88,7 @@ export const NAV_SECTIONS: NavSection[] = [
     dashboardPath: '/section/preseason',
     color: '#6a1b9a',   // purple
     items: [
+      { label: 'Season Pipeline',  path: '/season-pipeline',      icon: <TimelineIcon />,      description: 'Track each program through its season lifecycle — divisions, teams, draft, schedule, and close.' },
       { label: 'Player Import',    path: '/player-import',        icon: <UploadFileIcon />,    description: 'Import players from SportsConnect enrollment CSV.' },
       { label: 'Eligibility',      path: '/address-validation',   icon: <LocationOnIcon />,    description: 'Geocode addresses and verify district eligibility.' },
       { label: 'Evaluations',      path: '/evaluations-hub',      icon: <AssessmentIcon />,    description: 'Baseball & softball evals, sign-up events, and print forms.' },

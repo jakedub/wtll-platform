@@ -65,6 +65,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import StaffRoute from './components/StaffRoute'
 import InternalConsolePage from './pages/InternalConsolePage'
 import JakePage from './pages/JakePage'
+import SeasonPipelinePage from './pages/SeasonPipelinePage'
 
 // ── Inner component — can call useAppSettings() since it's inside the provider ──
 function AppWithTheme() {
@@ -128,6 +129,7 @@ function AppWithTheme() {
                     <Route path="/team-management"       element={<TeamManagementPage />} />
                     <Route path="/team-management/softball" element={<TeamManagementPage />} />
                     <Route path="/program-years"         element={<ProgramYearPage />} />
+                    <Route path="/season-pipeline"       element={<SeasonPipelinePage />} />
                     <Route path="/evaluation-signups"    element={<EvaluationSignupPage />} />
                     <Route path="/evaluation-events"     element={<EvaluationEventsPage />} />
                     <Route path="/calendar-management"   element={<CalendarManagementPage />} />
