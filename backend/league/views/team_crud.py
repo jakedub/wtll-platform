@@ -48,7 +48,8 @@ class TeamUpdateDeleteView(APIView):
     def delete(self, request, pk):
         team = get_object_or_404(Team, pk=pk)
         # Safety: don't delete if players are assigned
-        if team.enrollments.filter(team=team).exists():
+        from league.models.player_program_enrollment import PlayerProgramEnrollment
+        if PlayerProgramEnrollment.objects.filter(team=team).exists():
             return Response(
                 {"error": f"Cannot delete '{team.name}' — players are assigned. Remove all players from the team first."},
                 status=400,

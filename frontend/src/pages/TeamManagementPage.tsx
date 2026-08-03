@@ -31,6 +31,23 @@ const PROGRAM_FILTERS = [
 interface TeamPlayer { id: number; first_name: string; last_name: string; jersey_size: string; is_pitcher: boolean; is_catcher: boolean }
 interface TeamData { id: number; name: string; year: number; division: number | null; division_name: string | null; coach: string; assistant_coach: string; home_location: string; jersey_color: string; sport: string; program_type: string | null; program_label: string | null; roster: TeamPlayer[] }
 interface FreeAgent { id: number; first_name: string; last_name: string; date_of_birth: string | null }
+interface DivisionOption { id: number; name: string; program_name: string | null; program_id: number | null }
+
+async function getDivisions(): Promise<DivisionOption[]> {
+  const res = await client.get("/divisions/")
+  return res.data ?? []
+}
+
+// Group division options by program name for use in a Select
+function divisionsByProgram(divisions: DivisionOption[]): Record<string, DivisionOption[]> {
+  const groups: Record<string, DivisionOption[]> = {}
+  for (const d of divisions) {
+    const key = d.program_name ?? "No Program"
+    if (!groups[key]) groups[key] = []
+    groups[key].push(d)
+  }
+  return groups
+}
 
 async function getTeams(sport?: string, year?: number, programType?: string, hideClosed?: boolean): Promise<TeamData[]> {
   const params: Record<string, any> = {}
@@ -170,15 +187,24 @@ function CoachEditableField({
 
 // ── Team card ─────────────────────────────────────────────────────────────────
 
-function TeamCard({ team, onUpdate, onAssign, onRemove, onDelete, boardMemberNames }: {
+function TeamCard({ team, onUpdate, onAssign, onRemove, onDelete, boardMemberNames, divisions }: {
   team: TeamData
   onUpdate: (id: number, data: Partial<TeamData>) => void
   onAssign: (teamId: number, divisionId: number | null) => void
   onRemove: (teamId: number, playerId: number, name: string) => void
   onDelete: (teamId: number, teamName: string) => void
   boardMemberNames: string[]
+  divisions: DivisionOption[]
 }) {
   const [open, setOpen] = useState(false)
+  const [divisionVal, setDivisionVal] = useState<number | "">(team.division ?? "")
+
+  const handleDivisionChange = (newId: number | "") => {
+    setDivisionVal(newId)
+    onUpdate(team.id, { division: newId || null } as any)
+  }
+
+  const divGroups = divisionsByProgram(divisions)
 
   return (
     <Paper elevation={0} sx={{ border: "1px solid #e4e4e7", borderRadius: 2, overflow: "hidden", mb: 1.5 }}>
@@ -208,8 +234,31 @@ function TeamCard({ team, onUpdate, onAssign, onRemove, onDelete, boardMemberNam
               suggestions={boardMemberNames}
               helperText="Separate multiple coaches with a comma, e.g. John Smith, Jane Doe"
               onSave={v => onUpdate(team.id, { assistant_coach: v })} />
-<EditableField label="Jersey Color" value={team.jersey_color || ""} placeholder="e.g. Red"
+            <EditableField label="Jersey Color" value={team.jersey_color || ""} placeholder="e.g. Red"
               onSave={v => onUpdate(team.id, { jersey_color: v })} />
+          </Box>
+
+          {/* Division selector */}
+          <Box sx={{ mb: 2 }}>
+            <Typography sx={{ fontSize: "0.68rem", color: "#aaa", lineHeight: 1, mb: 0.5 }}>Division</Typography>
+            <FormControl size="small" fullWidth>
+              <Select
+                value={divisionVal}
+                onChange={e => handleDivisionChange(Number(e.target.value) || "")}
+                displayEmpty
+                sx={{ fontSize: "0.83rem" }}
+              >
+                <MenuItem value="" sx={{ fontSize: "0.83rem", color: "#bbb" }}>— No Division —</MenuItem>
+                {Object.entries(divGroups).sort(([a], [b]) => a.localeCompare(b)).map(([prog, opts]) => [
+                  <MenuItem key={`hdr-${prog}`} disabled sx={{ fontSize: "0.7rem", fontWeight: 700, color: RED, textTransform: "uppercase", letterSpacing: "0.05em", py: 0.4, opacity: "1 !important" }}>
+                    {prog}
+                  </MenuItem>,
+                  ...opts.sort((a, b) => a.name.localeCompare(b.name)).map(d => (
+                    <MenuItem key={d.id} value={d.id} sx={{ fontSize: "0.83rem", pl: 3 }}>{d.name}</MenuItem>
+                  ))
+                ])}
+              </Select>
+            </FormControl>
           </Box>
 
           <Divider sx={{ mb: 1.5 }} />
@@ -262,6 +311,7 @@ export default function TeamManagementPage() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [createOpen, setCreateOpen] = useState(false)
   const [boardMemberNames, setBoardMemberNames] = useState<string[]>([])
+  const [divisions, setDivisions] = useState<DivisionOption[]>([])
   // Filters
   const [programFilter, setProgramFilter] = useState("ALL")
   const [teamFilter, setTeamFilter] = useState<string[]>([])
@@ -290,6 +340,11 @@ export default function TeamManagementPage() {
         setBoardMemberNames(list.map((b: any) => `${b.first_name} ${b.last_name}`.trim()).filter(Boolean).sort())
       })
       .catch(() => {})
+  }, [])
+
+  // Load divisions once (for team division selector)
+  useEffect(() => {
+    getDivisions().then(setDivisions).catch(() => {})
   }, [])
 
   const handleUpdate = async (id: number, data: Partial<TeamData>) => {
@@ -489,6 +544,7 @@ export default function TeamManagementPage() {
                 onRemove={handleRemove}
                 onDelete={handleDeleteTeam}
                 boardMemberNames={boardMemberNames}
+                divisions={divisions}
               />
             ))}
           </Box>
@@ -530,6 +586,7 @@ export default function TeamManagementPage() {
       <CreateTeamDialog
         open={createOpen}
         year={year}
+        divisions={divisions}
         onClose={() => setCreateOpen(false)}
         onCreated={async () => { setCreateOpen(false); await load() }}
       />
@@ -539,22 +596,20 @@ export default function TeamManagementPage() {
 
 // ── Create Team dialog ────────────────────────────────────────────────────────
 
-function CreateTeamDialog({ open, year, onClose, onCreated }: {
-  open: boolean; year: number; onClose: () => void; onCreated: () => void
+function CreateTeamDialog({ open, year, divisions, onClose, onCreated }: {
+  open: boolean; year: number; divisions: DivisionOption[]; onClose: () => void; onCreated: () => void
 }) {
   const [name, setName] = useState("")
   const [divisionId, setDivisionId] = useState<number | "">("")
   const [coach, setCoach] = useState("")
   const [assistantCoach, setAssistantCoach] = useState("")
   const [jerseyColor, setJerseyColor] = useState("")
-  const [divisions, setDivisions] = useState<{ id: number; name: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
       setName(""); setDivisionId(""); setCoach(""); setAssistantCoach(""); setJerseyColor(""); setError(null)
-      client.get("/divisions/").then(r => setDivisions(r.data?.data ?? r.data ?? [])).catch(() => {})
     }
   }, [open])
 
@@ -569,6 +624,8 @@ function CreateTeamDialog({ open, year, onClose, onCreated }: {
     } finally { setSaving(false) }
   }
 
+  const divGroups = divisionsByProgram(divisions)
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ fontWeight: 700 }}>Create New Team</DialogTitle>
@@ -578,9 +635,17 @@ function CreateTeamDialog({ open, year, onClose, onCreated }: {
           <TextField label="Team Name" size="small" fullWidth required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Cardinals" />
           <FormControl size="small" fullWidth>
             <InputLabel>Division</InputLabel>
-            <Select value={divisionId} label="Division" onChange={e => setDivisionId(Number(e.target.value) || "")}>
+            <Select value={divisionId} label="Division" onChange={e => setDivisionId(Number(e.target.value) || "")}
+              MenuProps={{ PaperProps: { sx: { maxHeight: 400 } } }}>
               <MenuItem value="">— Select Division —</MenuItem>
-              {divisions.map(d => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
+              {Object.entries(divGroups).sort(([a], [b]) => a.localeCompare(b)).map(([prog, opts]) => [
+                <MenuItem key={`hdr-${prog}`} disabled sx={{ fontSize: "0.72rem", fontWeight: 700, color: RED, textTransform: "uppercase", letterSpacing: "0.05em", py: 0.4, opacity: "1 !important" }}>
+                  {prog}
+                </MenuItem>,
+                ...opts.sort((a, b) => a.name.localeCompare(b.name)).map(d => (
+                  <MenuItem key={d.id} value={d.id} sx={{ pl: 3 }}>{d.name}</MenuItem>
+                ))
+              ])}
             </Select>
           </FormControl>
           <Box sx={{ display: "flex", gap: 2 }}>

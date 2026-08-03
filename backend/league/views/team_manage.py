@@ -127,6 +127,10 @@ class TeamManageDetailView(APIView):
         for field in allowed:
             if field in request.data:
                 setattr(team, field, request.data[field])
+        # Division FK — accept null or a division ID
+        if "division" in request.data:
+            div_val = request.data["division"]
+            team.division_id = int(div_val) if div_val else None
         team.save()
         return Response(TeamManageSerializer(team).data)
 
