@@ -24,7 +24,7 @@ DEFAULT_DIVISIONS = {
     "SHOWCASE":      [("Showcase Baseball", "baseball"), ("Showcase Softball", "softball")],
     "TEEN_BASEBALL": [("Teen Juniors", "baseball"), ("Teen Seniors", "baseball")],
     "TEEN_SOFTBALL": [("Teen Softball", "softball")],
-    "FALL_BALL":     [("Fall Ball Majors", "baseball"), ("Fall Ball AAA", "baseball"), ("Fall Ball AA", "baseball"), ("Fall Ball Softball", "softball")],
+    "FALL_BALL":     [("Fall PeeWee", "baseball"), ("Fall AA", "baseball"), ("Fall AAA", "baseball"), ("Fall Majors", "baseball"), ("Fall Softball Minors", "softball"), ("Fall Softball Majors", "softball")],
 }
 
 

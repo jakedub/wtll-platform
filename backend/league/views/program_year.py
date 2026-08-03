@@ -275,3 +275,47 @@ class ProgramCloseView(APIView):
             })
         else:
             return Response({"error": "Invalid action."}, status=400)
+
+
+class ProgramYearDeleteView(APIView):
+    """
+    DELETE /api/program-years/<pk>/
+    Deletes the program and cascades to:
+      - PlayerProgramEnrollment records linked to this program
+      - Team records for this program's year linked to its divisions
+    Divisions are preserved (program FK nullified) so other years are unaffected.
+    """
+
+    def delete(self, request, pk):
+        from django.db import transaction
+        from league.models.teams import Team
+        from league.models.player_program_enrollment import PlayerProgramEnrollment
+
+        try:
+            program = Program.objects.get(pk=pk)
+        except Program.DoesNotExist:
+            return Response({"error": "Program not found."}, status=404)
+
+        with transaction.atomic():
+            # Count for summary
+            enrollment_count = PlayerProgramEnrollment.objects.filter(program=program).count()
+            team_count = Team.objects.filter(division__program=program, year=program.season_year).count()
+
+            # Delete enrollments
+            PlayerProgramEnrollment.objects.filter(program=program).delete()
+
+            # Delete teams for this year under this program's divisions
+            Team.objects.filter(division__program=program, year=program.season_year).delete()
+
+            # Nullify program FK on linked divisions (preserve division records)
+            Division.objects.filter(program=program).update(program=None)
+
+            program_name = program.name
+            program.delete()
+
+        return Response({
+            "deleted": True,
+            "program": program_name,
+            "enrollments_deleted": enrollment_count,
+            "teams_deleted": team_count,
+        })

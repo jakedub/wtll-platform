@@ -47,21 +47,47 @@ async function startYear(year: number, programTypes: string[]): Promise<any> {
   return res.data
 }
 
+// ── Division defaults per program type ───────────────────────────────────────
+
+const PROGRAM_DIVISION_DEFAULTS: Record<string, { name: string; sport: "baseball" | "softball" }[]> = {
+  RECREATION: [
+    { name: "Tee Ball",        sport: "baseball" },
+    { name: "Pee Wee",         sport: "baseball" },
+    { name: "AA",              sport: "baseball" },
+    { name: "AAA",             sport: "baseball" },
+    { name: "Majors",          sport: "baseball" },
+    { name: "Softball Minors", sport: "softball" },
+    { name: "Softball Majors", sport: "softball" },
+  ],
+  FALL_BALL: [
+    { name: "Fall PeeWee",          sport: "baseball" },
+    { name: "Fall AA",              sport: "baseball" },
+    { name: "Fall AAA",             sport: "baseball" },
+    { name: "Fall Majors",          sport: "baseball" },
+    { name: "Fall Softball Minors", sport: "softball" },
+    { name: "Fall Softball Majors", sport: "softball" },
+  ],
+}
+
 // ── Division Panel ────────────────────────────────────────────────────────────
 
-function DivisionPanel({ programId }: { programId: number }) {
+function DivisionPanel({ programId, programType }: { programId: number; programType: string }) {
   const [divisions, setDivisions] = useState<DivisionInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Add form
-  const [addName, setAddName] = useState("")
-  const [addSport, setAddSport] = useState<"baseball" | "softball">("baseball")
-  const [adding, setAdding] = useState(false)
+  const [toggling, setToggling] = useState<string | null>(null)
 
   // Rename state: divisionId → draft name
   const [renaming, setRenaming] = useState<Record<number, string>>({})
   const [saving, setSaving] = useState<number | null>(null)
+
+  // Fallback free-text (for program types without predefined defaults)
+  const [addName, setAddName] = useState("")
+  const [addSport, setAddSport] = useState<"baseball" | "softball">("baseball")
+  const [adding, setAdding] = useState(false)
+
+  const defaults = PROGRAM_DIVISION_DEFAULTS[programType] ?? []
+  const hasDefaults = defaults.length > 0
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -74,16 +100,21 @@ function DivisionPanel({ programId }: { programId: number }) {
 
   useEffect(() => { load() }, [load])
 
-  const handleAdd = async () => {
-    if (!addName.trim()) return
-    setAdding(true); setError(null)
+  const existingNames = new Set(divisions.map(d => d.name))
+
+  const handleToggle = async (def: { name: string; sport: string }, checked: boolean) => {
+    setToggling(def.name); setError(null)
     try {
-      await client.post(`/program-years/${programId}/divisions/`, { name: addName.trim(), sport: addSport })
-      setAddName("")
+      if (checked) {
+        await client.post(`/program-years/${programId}/divisions/`, { name: def.name, sport: def.sport })
+      } else {
+        const div = divisions.find(d => d.name === def.name)
+        if (div) await client.delete(`/program-years/${programId}/divisions/${div.id}/`)
+      }
       await load()
     } catch (e: any) {
-      setError(e?.response?.data?.error ?? "Failed to add division.")
-    } finally { setAdding(false) }
+      setError(e?.response?.data?.error ?? (checked ? "Failed to add division." : "Failed to remove division."))
+    } finally { setToggling(null) }
   }
 
   const handleRename = async (divId: number) => {
@@ -110,89 +141,174 @@ function DivisionPanel({ programId }: { programId: number }) {
     }
   }
 
+  const handleAdd = async () => {
+    if (!addName.trim()) return
+    setAdding(true); setError(null)
+    try {
+      await client.post(`/program-years/${programId}/divisions/`, { name: addName.trim(), sport: addSport })
+      setAddName("")
+      await load()
+    } catch (e: any) {
+      setError(e?.response?.data?.error ?? "Failed to add division.")
+    } finally { setAdding(false) }
+  }
+
   if (loading) return <Box sx={{ py: 1.5, display: "flex", justifyContent: "center" }}><CircularProgress size={18} sx={{ color: RED }} /></Box>
+
+  // Divisions not in the defaults list (custom or legacy)
+  const extraDivisions = divisions.filter(d => !defaults.some(def => def.name === d.name))
 
   return (
     <Box sx={{ pt: 1 }}>
       {error && <Alert severity="error" sx={{ mb: 1, py: 0.5, fontSize: "0.78rem" }} onClose={() => setError(null)}>{error}</Alert>}
 
-      {divisions.length === 0 && !loading && (
-        <Typography sx={{ fontSize: "0.78rem", color: "#bbb", mb: 1 }}>No divisions yet.</Typography>
+      {hasDefaults ? (
+        <>
+          {defaults.map(def => {
+            const isChecked = existingNames.has(def.name)
+            const isToggling = toggling === def.name
+            const div = divisions.find(d => d.name === def.name)
+            return (
+              <Box key={def.name} sx={{ display: "flex", alignItems: "center", gap: 0.5, py: 0.4, borderBottom: "1px solid #f4f4f5" }}>
+                <Checkbox
+                  checked={isChecked}
+                  disabled={isToggling}
+                  onChange={e => handleToggle(def, e.target.checked)}
+                  size="small"
+                  sx={{ p: 0.3, color: "#ccc", "&.Mui-checked": { color: RED } }}
+                />
+                {isChecked && div && renaming[div.id] !== undefined ? (
+                  <>
+                    <TextField
+                      size="small"
+                      value={renaming[div.id]}
+                      onChange={e => setRenaming(prev => ({ ...prev, [div!.id]: e.target.value }))}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") handleRename(div.id)
+                        if (e.key === "Escape") setRenaming(prev => { const n = { ...prev }; delete n[div!.id]; return n })
+                      }}
+                      autoFocus
+                      sx={{ flex: 1, "& input": { fontSize: "0.78rem", py: 0.4 } }}
+                    />
+                    <Tooltip title="Save">
+                      <IconButton size="small" onClick={() => handleRename(div.id)} disabled={saving === div.id}>
+                        {saving === div.id ? <CircularProgress size={12} /> : <SaveIcon sx={{ fontSize: 13, color: "#2e7d32" }} />}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Cancel">
+                      <IconButton size="small" onClick={() => setRenaming(prev => { const n = { ...prev }; delete n[div!.id]; return n })}>
+                        <CancelIcon sx={{ fontSize: 13, color: "#aaa" }} />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                ) : (
+                  <>
+                    <Typography sx={{ flex: 1, fontSize: "0.8rem", color: isChecked ? "#111" : "#aaa" }}>{def.name}</Typography>
+                    <Chip
+                      label={def.sport === "softball" ? "Softball" : "Baseball"}
+                      size="small"
+                      sx={{ height: 15, fontSize: "0.6rem", bgcolor: def.sport === "softball" ? "#fce4ec" : "#e3f2fd", color: def.sport === "softball" ? "#880e4f" : "#0d47a1" }}
+                    />
+                    {isChecked && div && (
+                      <Tooltip title="Rename">
+                        <IconButton size="small" onClick={() => setRenaming(prev => ({ ...prev, [div.id]: div.name }))}>
+                          <EditIcon sx={{ fontSize: 12, color: "#ccc" }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {isToggling && <CircularProgress size={12} sx={{ color: RED, ml: 0.5 }} />}
+                  </>
+                )}
+              </Box>
+            )
+          })}
+
+          {/* Extra divisions not in defaults */}
+          {extraDivisions.map(div => (
+            <Box key={div.id} sx={{ display: "flex", alignItems: "center", gap: 0.75, py: 0.4, borderBottom: "1px solid #f4f4f5" }}>
+              {renaming[div.id] !== undefined ? (
+                <>
+                  <TextField size="small" value={renaming[div.id]}
+                    onChange={e => setRenaming(prev => ({ ...prev, [div.id]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === "Enter") handleRename(div.id); if (e.key === "Escape") setRenaming(prev => { const n = { ...prev }; delete n[div.id]; return n }) }}
+                    autoFocus sx={{ flex: 1, "& input": { fontSize: "0.78rem", py: 0.4 } }} />
+                  <Tooltip title="Save"><IconButton size="small" onClick={() => handleRename(div.id)} disabled={saving === div.id}>
+                    {saving === div.id ? <CircularProgress size={12} /> : <SaveIcon sx={{ fontSize: 13, color: "#2e7d32" }} />}
+                  </IconButton></Tooltip>
+                  <Tooltip title="Cancel"><IconButton size="small" onClick={() => setRenaming(prev => { const n = { ...prev }; delete n[div.id]; return n })}>
+                    <CancelIcon sx={{ fontSize: 13, color: "#aaa" }} />
+                  </IconButton></Tooltip>
+                </>
+              ) : (
+                <>
+                  <Typography sx={{ flex: 1, fontSize: "0.8rem" }}>{div.name}</Typography>
+                  <Chip label={div.sport === "softball" ? "Softball" : "Baseball"} size="small"
+                    sx={{ height: 15, fontSize: "0.6rem", bgcolor: div.sport === "softball" ? "#fce4ec" : "#e3f2fd", color: div.sport === "softball" ? "#880e4f" : "#0d47a1" }} />
+                  <Tooltip title="Rename"><IconButton size="small" onClick={() => setRenaming(prev => ({ ...prev, [div.id]: div.name }))}>
+                    <EditIcon sx={{ fontSize: 12, color: "#ccc" }} />
+                  </IconButton></Tooltip>
+                  <Tooltip title="Delete"><IconButton size="small" onClick={() => handleDelete(div)}>
+                    <DeleteOutlineIcon sx={{ fontSize: 12, color: "#ccc" }} />
+                  </IconButton></Tooltip>
+                </>
+              )}
+            </Box>
+          ))}
+        </>
+      ) : (
+        /* No defaults — show existing divisions with full controls */
+        divisions.map(div => (
+          <Box key={div.id} sx={{ display: "flex", alignItems: "center", gap: 0.75, py: 0.4, borderBottom: "1px solid #f4f4f5" }}>
+            {renaming[div.id] !== undefined ? (
+              <>
+                <TextField size="small" value={renaming[div.id]}
+                  onChange={e => setRenaming(prev => ({ ...prev, [div.id]: e.target.value }))}
+                  onKeyDown={e => { if (e.key === "Enter") handleRename(div.id); if (e.key === "Escape") setRenaming(prev => { const n = { ...prev }; delete n[div.id]; return n }) }}
+                  autoFocus sx={{ flex: 1, "& input": { fontSize: "0.78rem", py: 0.4 } }} />
+                <Tooltip title="Save"><IconButton size="small" onClick={() => handleRename(div.id)} disabled={saving === div.id}>
+                  {saving === div.id ? <CircularProgress size={12} /> : <SaveIcon sx={{ fontSize: 13, color: "#2e7d32" }} />}
+                </IconButton></Tooltip>
+                <Tooltip title="Cancel"><IconButton size="small" onClick={() => setRenaming(prev => { const n = { ...prev }; delete n[div.id]; return n })}>
+                  <CancelIcon sx={{ fontSize: 13, color: "#aaa" }} />
+                </IconButton></Tooltip>
+              </>
+            ) : (
+              <>
+                <Typography sx={{ flex: 1, fontSize: "0.8rem" }}>{div.name}</Typography>
+                <Chip label={div.sport === "softball" ? "Softball" : "Baseball"} size="small"
+                  sx={{ height: 15, fontSize: "0.6rem", bgcolor: div.sport === "softball" ? "#fce4ec" : "#e3f2fd", color: div.sport === "softball" ? "#880e4f" : "#0d47a1" }} />
+                <Tooltip title="Rename"><IconButton size="small" onClick={() => setRenaming(prev => ({ ...prev, [div.id]: div.name }))}>
+                  <EditIcon sx={{ fontSize: 12, color: "#ccc" }} />
+                </IconButton></Tooltip>
+                <Tooltip title="Delete"><IconButton size="small" onClick={() => handleDelete(div)}>
+                  <DeleteOutlineIcon sx={{ fontSize: 12, color: "#ccc" }} />
+                </IconButton></Tooltip>
+              </>
+            )}
+          </Box>
+        ))
       )}
 
-      {divisions.map(div => (
-        <Box key={div.id} sx={{ display: "flex", alignItems: "center", gap: 0.75, py: 0.5, borderBottom: "1px solid #f0f0f0" }}>
-          {renaming[div.id] !== undefined ? (
-            <>
-              <TextField
-                size="small"
-                value={renaming[div.id]}
-                onChange={e => setRenaming(prev => ({ ...prev, [div.id]: e.target.value }))}
-                onKeyDown={e => { if (e.key === "Enter") handleRename(div.id); if (e.key === "Escape") setRenaming(prev => { const n = { ...prev }; delete n[div.id]; return n }) }}
-                autoFocus
-                sx={{ flex: 1, "& input": { fontSize: "0.8rem", py: 0.5 } }}
-              />
-              <Tooltip title="Save">
-                <IconButton size="small" onClick={() => handleRename(div.id)} disabled={saving === div.id}>
-                  {saving === div.id ? <CircularProgress size={13} /> : <SaveIcon sx={{ fontSize: 14, color: "#2e7d32" }} />}
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Cancel">
-                <IconButton size="small" onClick={() => setRenaming(prev => { const n = { ...prev }; delete n[div.id]; return n })}>
-                  <CancelIcon sx={{ fontSize: 14, color: "#aaa" }} />
-                </IconButton>
-              </Tooltip>
-            </>
-          ) : (
-            <>
-              <Typography sx={{ flex: 1, fontSize: "0.8rem" }}>{div.name}</Typography>
-              <Chip
-                label={div.sport === "softball" ? "Softball" : "Baseball"}
-                size="small"
-                sx={{ height: 16, fontSize: "0.62rem", bgcolor: div.sport === "softball" ? "#fce4ec" : "#e3f2fd", color: div.sport === "softball" ? "#880e4f" : "#0d47a1" }}
-              />
-              <Tooltip title="Rename">
-                <IconButton size="small" onClick={() => setRenaming(prev => ({ ...prev, [div.id]: div.name }))}>
-                  <EditIcon sx={{ fontSize: 13, color: "#ccc", "&:hover": { color: RED } }} />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton size="small" onClick={() => handleDelete(div)}>
-                  <DeleteOutlineIcon sx={{ fontSize: 13, color: "#ccc", "&:hover": { color: RED } }} />
-                </IconButton>
-              </Tooltip>
-            </>
-          )}
+      {/* Free-text add for non-default program types, or to add custom divisions */}
+      {(!hasDefaults) && (
+        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 1.25 }}>
+          <TextField size="small" placeholder="Division name" value={addName}
+            onChange={e => setAddName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleAdd() }}
+            sx={{ flex: 1, "& input": { fontSize: "0.8rem", py: 0.6 } }} />
+          <FormControl size="small" sx={{ minWidth: 100 }}>
+            <Select value={addSport} onChange={e => setAddSport(e.target.value as "baseball" | "softball")} sx={{ fontSize: "0.78rem" }}>
+              <MenuItem value="baseball" sx={{ fontSize: "0.8rem" }}>Baseball</MenuItem>
+              <MenuItem value="softball" sx={{ fontSize: "0.8rem" }}>Softball</MenuItem>
+            </Select>
+          </FormControl>
+          <Button size="small" variant="contained" disabled={adding || !addName.trim()} onClick={handleAdd}
+            startIcon={adding ? <CircularProgress size={12} color="inherit" /> : <AddIcon sx={{ fontSize: 14 }} />}
+            sx={{ bgcolor: RED, "&:hover": { bgcolor: "#960E24" }, fontSize: "0.75rem", py: 0.6, whiteSpace: "nowrap" }}>
+            Add
+          </Button>
         </Box>
-      ))}
-
-      {/* Add row */}
-      <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 1.25 }}>
-        <TextField
-          size="small"
-          placeholder="Division name"
-          value={addName}
-          onChange={e => setAddName(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") handleAdd() }}
-          sx={{ flex: 1, "& input": { fontSize: "0.8rem", py: 0.6 } }}
-        />
-        <FormControl size="small" sx={{ minWidth: 100 }}>
-          <Select value={addSport} onChange={e => setAddSport(e.target.value as "baseball" | "softball")} sx={{ fontSize: "0.78rem" }}>
-            <MenuItem value="baseball" sx={{ fontSize: "0.8rem" }}>Baseball</MenuItem>
-            <MenuItem value="softball" sx={{ fontSize: "0.8rem" }}>Softball</MenuItem>
-          </Select>
-        </FormControl>
-        <Button
-          size="small"
-          variant="contained"
-          disabled={adding || !addName.trim()}
-          onClick={handleAdd}
-          startIcon={adding ? <CircularProgress size={12} color="inherit" /> : <AddIcon sx={{ fontSize: 14 }} />}
-          sx={{ bgcolor: RED, "&:hover": { bgcolor: "#960E24" }, fontSize: "0.75rem", py: 0.6, whiteSpace: "nowrap" }}
-        >
-          Add
-        </Button>
-      </Box>
+      )}
     </Box>
   )
 }
@@ -300,13 +416,28 @@ function StartYearDialog({ open, onClose, onStarted }: { open: boolean; onClose:
 
 // ── Program Card ──────────────────────────────────────────────────────────────
 
-function ProgramCard({ program: p, color, toggling, onToggleClose }: {
+function ProgramCard({ program: p, color, toggling, onToggleClose, onDelete }: {
   program: ProgramInfo
   color: string
   toggling: number | null
   onToggleClose: (p: ProgramInfo) => void
+  onDelete: (p: ProgramInfo) => void
 }) {
   const [divisionsOpen, setDivisionsOpen] = useState(false)
+  const [deleteDialog, setDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const handleDelete = async () => {
+    setDeleting(true); setDeleteError(null)
+    try {
+      await client.delete(`/program-years/${p.id}/delete/`)
+      setDeleteDialog(false)
+      onDelete(p)
+    } catch (e: any) {
+      setDeleteError(e?.response?.data?.error ?? "Failed to delete program year.")
+    } finally { setDeleting(false) }
+  }
 
   return (
     <Box sx={{
@@ -317,7 +448,12 @@ function ProgramCard({ program: p, color, toggling, onToggleClose }: {
     }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
         <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: p.season_closed ? "#ccc" : color, flexShrink: 0 }} />
-        <Typography sx={{ fontWeight: 700, fontSize: "0.82rem", color: p.season_closed ? "#999" : color }}>{p.program_type_label}</Typography>
+        <Typography sx={{ fontWeight: 700, fontSize: "0.82rem", color: p.season_closed ? "#999" : color, flex: 1 }}>{p.program_type_label}</Typography>
+        <Tooltip title="Delete program year">
+          <IconButton size="small" onClick={() => setDeleteDialog(true)} sx={{ p: 0.3 }}>
+            <DeleteOutlineIcon sx={{ fontSize: 14, color: "#ddd", "&:hover": { color: RED } }} />
+          </IconButton>
+        </Tooltip>
       </Box>
       <Typography sx={{ fontSize: "0.72rem", color: "#888" }}>
         {p.sport === "softball" ? "Softball" : p.sport === "both" ? "Baseball & Softball" : "Baseball"}
@@ -368,8 +504,32 @@ function ProgramCard({ program: p, color, toggling, onToggleClose }: {
 
       <Collapse in={divisionsOpen}>
         <Divider sx={{ mt: 0.5, mb: 0.5 }} />
-        <DivisionPanel programId={p.id} />
+        <DivisionPanel programId={p.id} programType={p.program_type} />
       </Collapse>
+
+      {/* Delete confirm dialog */}
+      <Dialog open={deleteDialog} onClose={() => !deleting && setDeleteDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontSize: "0.95rem", fontWeight: 700, color: RED }}>Delete Program Year</DialogTitle>
+        <DialogContent>
+          {deleteError && <Alert severity="error" sx={{ mb: 1.5 }}>{deleteError}</Alert>}
+          <Typography sx={{ fontSize: "0.85rem" }}>
+            Delete <strong>{p.program_type_label} {p.season_year}</strong>? This will also delete all teams and player enrollments tied to this program. Divisions will be preserved.
+          </Typography>
+          <Typography sx={{ fontSize: "0.78rem", color: "#999", mt: 1 }}>This cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog(false)} disabled={deleting} sx={{ fontSize: "0.8rem", color: "#666" }}>Cancel</Button>
+          <Button
+            onClick={handleDelete}
+            disabled={deleting}
+            variant="contained"
+            startIcon={deleting ? <CircularProgress size={12} color="inherit" /> : <DeleteOutlineIcon sx={{ fontSize: 14 }} />}
+            sx={{ bgcolor: RED, "&:hover": { bgcolor: "#960E24" }, fontSize: "0.8rem" }}
+          >
+            {deleting ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }
@@ -402,6 +562,10 @@ export default function ProgramYearPage() {
       await load()
     } catch { setError("Failed to update season status.") }
     finally { setToggling(null) }
+  }
+
+  const handleDeleteProgram = (_program: ProgramInfo) => {
+    load()
   }
 
   useEffect(() => { load() }, [])
@@ -455,6 +619,7 @@ export default function ProgramYearPage() {
                     color={color}
                     toggling={toggling}
                     onToggleClose={handleToggleClose}
+                    onDelete={handleDeleteProgram}
                   />
                 )
               })}
