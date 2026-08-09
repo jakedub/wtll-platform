@@ -306,3 +306,61 @@ class UploadPlayersView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class ResyncPlayerSportsView(APIView):
+    """
+    POST /api/players/resync-sports/
+
+    Staff-only utility. Iterates every active PlayerProgramEnrollment and
+    updates player.sport based on the enrolled division name:
+      - "softball" in division.name (case-insensitive) → sport = "softball"
+      - anything else                                  → sport = "baseball"
+
+    Only touches players whose sport value would actually change.
+    Returns { updated, unchanged, total }.
+    """
+
+    def post(self, request, *args, **kwargs):
+        from league.models.player_program_enrollment import PlayerProgramEnrollment
+
+        # Process the most-recent active enrollment per player.
+        # Use a dict so each player is only updated once (latest wins).
+        player_sport_map: dict[int, str] = {}
+
+        enrollments = (
+            PlayerProgramEnrollment.objects
+            .select_related("player", "division", "program")
+            .filter(
+                program__is_active=True,
+                program__season_closed=False,
+            )
+            .exclude(division=None)
+            .order_by("player_id", "-program__season_year", "-id")
+        )
+
+        for enrollment in enrollments:
+            pid = enrollment.player_id
+            if pid in player_sport_map:
+                continue  # already captured a newer enrollment for this player
+            division_name = (enrollment.division.name or "").lower()
+            player_sport_map[pid] = "softball" if "softball" in division_name else "baseball"
+
+        updated = 0
+        unchanged = 0
+        for pid, new_sport in player_sport_map.items():
+            rows = Player.objects.filter(pk=pid).exclude(sport=new_sport).update(sport=new_sport)
+            if rows:
+                updated += rows
+            else:
+                unchanged += 1
+
+        return Response(
+            {
+                "updated": updated,
+                "unchanged": unchanged,
+                "total": len(player_sport_map),
+                "message": f"Resynced {len(player_sport_map)} players: {updated} updated, {unchanged} already correct.",
+            },
+            status=status.HTTP_200_OK,
+        )

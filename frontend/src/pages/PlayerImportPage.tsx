@@ -22,8 +22,10 @@ import UploadFileIcon from "@mui/icons-material/UploadFile"
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import RefreshIcon from "@mui/icons-material/Refresh"
+import SyncIcon from "@mui/icons-material/Sync"
 import { importPlayerCSV } from "../api/players"
 import client from "../api/client"
+import { useAuth } from "../context/AuthContext"
 import type { ImportResult, Player } from "../models/player"
 
 interface ProgramOption {
@@ -128,11 +130,16 @@ function FailureTable({ failures }: { failures: { row: number; error: string }[]
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PlayerImportPage() {
+  const { user } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Resync sports state
+  const [resyncing, setResyncing] = useState(false)
+  const [resyncResult, setResyncResult] = useState<string | null>(null)
 
   // Program selector state
   const [programs, setPrograms] = useState<ProgramOption[]>([])
@@ -175,6 +182,19 @@ export default function PlayerImportPage() {
       setError(msg)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResync = async () => {
+    setResyncing(true)
+    setResyncResult(null)
+    try {
+      const res = await client.post("/players/resync-sports/")
+      setResyncResult(res.data?.message ?? "Done.")
+    } catch {
+      setResyncResult("Resync failed. Check backend logs.")
+    } finally {
+      setResyncing(false)
     }
   }
 
@@ -321,6 +341,43 @@ export default function PlayerImportPage() {
           </Typography>
         </Box>
       </Paper>
+
+      {/* Staff-only: Resync Player Sports */}
+      {user?.is_staff && (
+        <Paper
+          elevation={0}
+          sx={{
+            border: "1px solid #e4e4e7",
+            borderRadius: 2,
+            p: 2.5,
+            mb: 3,
+            maxWidth: 600,
+          }}
+        >
+          <Typography sx={{ fontWeight: 600, mb: 0.5 }}>Fix Player Sports</Typography>
+          <Typography sx={{ fontSize: "0.8rem", color: "#777", mb: 1.5 }}>
+            Run this after importing if softball players are still appearing under Baseball Ops.
+            Updates each player's sport field based on their current enrollment division.
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+            <Button
+              variant="outlined"
+              color="inherit"
+              size="small"
+              startIcon={resyncing ? <CircularProgress size={14} color="inherit" /> : <SyncIcon />}
+              onClick={handleResync}
+              disabled={resyncing}
+            >
+              {resyncing ? "Resyncing…" : "Resync Sports"}
+            </Button>
+            {resyncResult && (
+              <Typography sx={{ fontSize: "0.8rem", color: resyncResult.includes("failed") ? "#C41230" : "#2e7d32" }}>
+                {resyncResult}
+              </Typography>
+            )}
+          </Box>
+        </Paper>
+      )}
 
       {/* Error */}
       {error && (

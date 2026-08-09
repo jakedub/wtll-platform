@@ -230,7 +230,7 @@ export default function AppLayout({ children }: Props) {
       {/* Version — staff only */}
       {user?.is_staff && (
         <Typography sx={{ fontSize: "0.55rem", color: "rgba(255,255,255,0.25)", textAlign: "center", mb: 0.5, letterSpacing: "0.04em" }}>
-          v0.1.0
+          v0.1.1
         </Typography>
       )}
 

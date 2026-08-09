@@ -22,7 +22,7 @@ from league.views.softball_innings import (
 )
 from league.views.player_pitch_summary import PlayerPitchSummaryView
 from league.views.my_teams import MyTeamsView
-from league.views.player_uploads import UploadPlayersView
+from league.views.player_uploads import UploadPlayersView, ResyncPlayerSportsView
 from league.views.volunteer import VolunteerGameListView, VolunteerSignupCreateView, VolunteerSignupDeleteView, VolunteerPublicConfigView, ConcessionsCloseView
 from league.views.umpire import UmpireGameListView, UmpireSignupCreateView, UmpireSignupDeleteView, UmpirePublicConfigView
 from league.views.allstars import AllStarListCreateView, AllStarDetailView, AllStarSummaryView
@@ -138,6 +138,7 @@ urlpatterns = [
 
     # Players
     path("players/import/", UploadPlayersView.as_view(), name="player-import"),
+    path("players/resync-sports/", ResyncPlayerSportsView.as_view(), name="player-resync-sports"),
     path("players/sibling-check/", SiblingCheckView.as_view(), name="player-sibling-check"),
     path("players/", PlayerListView.as_view(), name="player-list"),
     path("players/<int:player_id>/", PlayerDetailView.as_view(), name="player-detail"),
