@@ -2,6 +2,7 @@
 
 JERSEY_MAP = {
     "youth x-small": "YXS",
+    "youth xs":      "YXS",   # Fall Ball CSV variant
     "youth small":   "YS",
     "youth medium":  "YM",
     "youth large":   "YL",
@@ -28,7 +29,7 @@ def normalize_jersey_size(value: str) -> str:
     if not value or not value.strip():
         return ""
 
-    cleaned = value.strip().lower()
+    cleaned = value.strip().lower().replace("-", " ")
 
     if cleaned not in JERSEY_MAP:
         raise ValueError(f"Unknown jersey size from CSV: '{value}'")

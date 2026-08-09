@@ -137,7 +137,7 @@ class PlayerEnrollmentsView(generics.ListAPIView):
             PlayerProgramEnrollment.objects
             .filter(player_id=player_id)
             .select_related("program", "division", "team")
-            .order_by("division__name", "team__name")
+            .order_by("-program__season_year", "program__program_type")
         )
 
     def list(self, request, *args, **kwargs):

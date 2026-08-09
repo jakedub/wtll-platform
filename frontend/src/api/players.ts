@@ -71,10 +71,15 @@ export async function deletePlayerPermanently(id: number): Promise<void> {
   await client.delete(`/players/${id}/delete/`)
 }
 
-export async function importPlayerCSV(file: File, sport: "baseball" | "softball" = "baseball") {
+export async function importPlayerCSV(
+  file: File,
+  sport: "baseball" | "softball" = "baseball",
+  programId?: number,
+) {
   const formData = new FormData()
   formData.append("file", file)
   formData.append("sport", sport)
+  if (programId) formData.append("program_id", String(programId))
   const res = await client.post("/players/import/", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   })

@@ -317,7 +317,7 @@ class FallBallAutoAssignView(APIView):
         enrollments = PlayerProgramEnrollment.objects.select_related(
             "player", "division", "team"
         ).filter(
-            division__program=draft.division.program,
+            division=draft.division,
             player__is_archived=False,
         ).exclude(player_id__in=already_drafted_ids)
 

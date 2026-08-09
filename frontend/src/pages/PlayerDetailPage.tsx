@@ -53,6 +53,17 @@ export default function PlayerDetailPage() {
   const [history, setHistory] = useState<PitchCount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [programHistory, setProgramHistory] = useState<ProgramHistoryEntry[]>([])
+
+  interface ProgramHistoryEntry {
+    id: number
+    season_year: number
+    program_name: string
+    program_type_label: string | null
+    division_name: string | null
+    team_name: string | null
+    season_closed: boolean
+  }
 
   // Edit profile state
   const [editOpen, setEditOpen] = useState(false)
@@ -121,14 +132,16 @@ export default function PlayerDetailPage() {
 
   const load = async () => {
     try {
-      const [p, s, h] = await Promise.all([
+      const [p, s, h, enr] = await Promise.all([
         getPlayer(playerId),
         getPlayerPitchStatus(playerId),
         getPlayerPitchHistory(playerId),
+        client.get(`/players/${playerId}/enrollments/`).then(r => r.data?.data ?? r.data ?? []),
       ])
       setPlayer(p)
       setPitchStatus(s)
       setHistory(h)
+      setProgramHistory(enr)
     } catch {
       setError('Failed to load player data.')
     } finally {
@@ -593,6 +606,69 @@ export default function PlayerDetailPage() {
             </Card>
           </Grid>
         )}
+
+        {/* Program / Team History */}
+        <Grid item xs={12}>
+          <Card elevation={0} sx={{ border: '1px solid #e4e4e7', borderRadius: 2 }}>
+            <CardContent>
+              <Typography variant="overline" color="text.secondary" gutterBottom>
+                Program History
+              </Typography>
+              {programHistory.length === 0 ? (
+                <Typography sx={{ fontSize: '0.82rem', color: '#bbb', mt: 1 }}>
+                  No program enrollments on record.
+                </Typography>
+              ) : (
+                <TableContainer sx={{ mt: 1 }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', color: '#888', borderBottom: '2px solid #f0f0f0' }}>Year</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', color: '#888', borderBottom: '2px solid #f0f0f0' }}>Program</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', color: '#888', borderBottom: '2px solid #f0f0f0' }}>Division</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', color: '#888', borderBottom: '2px solid #f0f0f0' }}>Team</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', color: '#888', borderBottom: '2px solid #f0f0f0' }}>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {programHistory.map(entry => (
+                        <TableRow key={entry.id} sx={{ '&:last-child td': { borderBottom: 0 }, opacity: entry.season_closed ? 0.65 : 1 }}>
+                          <TableCell>
+                            <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
+                              {entry.season_year}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {entry.program_type_label ?? entry.program_name}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color={entry.division_name ? 'text.primary' : 'text.disabled'}>
+                              {entry.division_name ?? '—'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={entry.team_name ? 600 : 400} color={entry.team_name ? 'text.primary' : 'text.disabled'}>
+                              {entry.team_name ?? 'Unrostered'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            {entry.season_closed ? (
+                              <Chip label="Closed" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#f4f4f5', color: '#888' }} />
+                            ) : (
+                              <Chip label="Active" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#f0fdf4', color: '#15803d', border: '1px solid #86efac' }} />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
     </Box>
   )

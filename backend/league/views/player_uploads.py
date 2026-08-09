@@ -121,16 +121,27 @@ class UploadPlayersView(APIView):
         # "Little League School Name" and "Little League School Name.1"
         # We capture both so _col() picks whichever has a value.
 
-        # Find or create the Recreation program for the current season year
-        # (CSV imports are always for the Recreation program)
-        import datetime as _dt
-        current_year = _dt.date.today().year
-        default_program = (
-            Program.objects.filter(is_active=True, program_type="RECREATION").order_by("-season_year").first()
-            or Program.objects.filter(is_active=True).order_by("-season_year").first()
-        )
+        # Resolve the target program.
+        # Frontend can pass ?program_id=<pk> (query param) or program_id in form data.
+        program_id = request.data.get("program_id") or request.query_params.get("program_id")
+        if program_id:
+            try:
+                default_program = Program.objects.get(pk=int(program_id))
+            except (Program.DoesNotExist, ValueError):
+                return Response(
+                    {"error": f"Program with id {program_id} not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            # Legacy fallback: active Recreation program
+            default_program = (
+                Program.objects.filter(is_active=True, program_type="RECREATION").order_by("-season_year").first()
+                or Program.objects.filter(is_active=True).order_by("-season_year").first()
+            )
 
+        # Track per-player import metadata for the result display
         inserted_ids, updated_ids, failures = [], [], []
+        player_division_map: dict[int, str] = {}   # player_id → division name for this import
 
         for idx, row in df.iterrows():
             row_num = idx + 2
@@ -189,7 +200,7 @@ class UploadPlayersView(APIView):
 
                 if division_raw:
                     try:
-                        division_obj, sport = map_division(division_raw)
+                        division_obj, sport = map_division(division_raw, program=default_program)
                     except ValueError as div_err:
                         logger.warning("Row %s division error: %s", row_num, div_err)
                         failures.append({
@@ -261,15 +272,31 @@ class UploadPlayersView(APIView):
                         program=default_program,
                         defaults={"division": division_obj, "team": None},
                     )
+                    player_division_map[player.id] = division_obj.name
+                elif default_program:
+                    # Player in file but no division matched — still record program
+                    PlayerProgramEnrollment.objects.get_or_create(
+                        player=player,
+                        program=default_program,
+                    )
 
             except Exception as exc:
                 logger.error("Row %s failed: %s", row_num, exc, exc_info=True)
                 failures.append({"row": row_num, "error": str(exc)})
 
+        def _annotate(players_qs):
+            """Serialize players and inject the division assigned during this import."""
+            rows = PlayerSerializer(players_qs, many=True).data
+            for row in rows:
+                pid = row.get("id")
+                if pid in player_division_map:
+                    row["division_name"] = player_division_map[pid]
+            return rows
+
         return Response(
             {
-                "inserted": PlayerSerializer(Player.objects.filter(id__in=inserted_ids), many=True).data,
-                "updated":  PlayerSerializer(Player.objects.filter(id__in=updated_ids), many=True).data,
+                "inserted": _annotate(Player.objects.filter(id__in=inserted_ids)),
+                "updated":  _annotate(Player.objects.filter(id__in=updated_ids)),
                 "failures": failures,
                 "summary": {
                     "inserted_count": len(inserted_ids),

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Alert,
   Box,
@@ -6,7 +6,11 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -19,7 +23,17 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import { importPlayerCSV } from "../api/players"
+import client from "../api/client"
 import type { ImportResult, Player } from "../models/player"
+
+interface ProgramOption {
+  id: number
+  name: string
+  program_type: string
+  season_year: number
+  is_active: boolean
+  season_closed: boolean
+}
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
@@ -69,7 +83,7 @@ function PlayerTable({ players, emptyText }: { players: Player[]; emptyText: str
               <TableCell sx={{ fontSize: "0.82rem" }}>{p.last_name}</TableCell>
               <TableCell sx={{ fontSize: "0.82rem" }}>{p.first_name}</TableCell>
               <TableCell sx={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}>{p.date_of_birth ?? "—"}</TableCell>
-              <TableCell sx={{ fontSize: "0.82rem" }}>—</TableCell>
+              <TableCell sx={{ fontSize: "0.82rem" }}>{p.division_name || "—"}</TableCell>
               <TableCell sx={{ fontSize: "0.82rem" }}>{p.school_name || "—"}</TableCell>
               <TableCell sx={{ fontSize: "0.82rem" }}>{p.jersey_size || "—"}</TableCell>
               <TableCell sx={{ fontSize: "0.82rem" }}>
@@ -120,6 +134,23 @@ export default function PlayerImportPage() {
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Program selector state
+  const [programs, setPrograms] = useState<ProgramOption[]>([])
+  const [selectedProgramId, setSelectedProgramId] = useState<number | "">("")
+
+  useEffect(() => {
+    client.get("/program-years/").then((res) => {
+      // Response shape: [{ year: 2026, programs: [...] }, ...]
+      const grouped: { year: number; programs: ProgramOption[] }[] = res.data ?? []
+      const all: ProgramOption[] = grouped.flatMap((g) => g.programs ?? [])
+      const active = all
+        .filter((p) => p.is_active && !p.season_closed)
+        .sort((a, b) => b.season_year - a.season_year || a.name.localeCompare(b.name))
+      setPrograms(active)
+      if (active.length > 0) setSelectedProgramId(active[0].id)
+    }).catch(() => {})
+  }, [])
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null
     setSelectedFile(f)
@@ -133,7 +164,8 @@ export default function PlayerImportPage() {
     setError(null)
     setResult(null)
     try {
-      const data = await importPlayerCSV(selectedFile)
+      const progId = selectedProgramId !== "" ? (selectedProgramId as number) : undefined
+      const data = await importPlayerCSV(selectedFile, "baseball", progId)
       setResult(data)
     } catch (err: any) {
       const msg =
@@ -181,6 +213,32 @@ export default function PlayerImportPage() {
       >
         <Typography sx={{ fontWeight: 600, mb: 2 }}>Select CSV File</Typography>
 
+        {/* Program selector */}
+        <FormControl fullWidth size="small" sx={{ mb: 2.5 }}>
+          <InputLabel id="program-select-label">Target Program</InputLabel>
+          <Select
+            labelId="program-select-label"
+            label="Target Program"
+            value={selectedProgramId}
+            onChange={(e) => setSelectedProgramId(e.target.value as number)}
+            disabled={programs.length === 0}
+          >
+            {programs.map((p) => (
+              <MenuItem key={p.id} value={p.id}>
+                {p.name}
+              </MenuItem>
+            ))}
+            {programs.length === 0 && (
+              <MenuItem value="" disabled>
+                No active programs
+              </MenuItem>
+            )}
+          </Select>
+          <Typography sx={{ fontSize: "0.72rem", color: "#888", mt: 0.5 }}>
+            Enrollment records will be created under the selected program.
+          </Typography>
+        </FormControl>
+
         {/* Drop zone */}
         <Box
           onClick={() => fileInputRef.current?.click()}
@@ -219,11 +277,11 @@ export default function PlayerImportPage() {
           <Button
             variant="contained"
             onClick={handleUpload}
-            disabled={!selectedFile || loading}
+            disabled={!selectedFile || loading || selectedProgramId === ""}
             startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <UploadFileIcon />}
             sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } }}
           >
-            {loading ? "Importing…" : "Import Players"}
+            {loading ? "Importing..." : "Import Players"}
           </Button>
           {(selectedFile || result) && (
             <Button variant="outlined" onClick={handleReset} startIcon={<RefreshIcon />} color="inherit">

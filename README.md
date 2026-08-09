@@ -16,7 +16,7 @@ A full-stack Django + React application for managing youth baseball and softball
 | Geocoding | Google Maps Geocoding API |
 | District Check | Shapely + GeoPandas (KML boundary file) |
 | Auth | Email + password (DRF Token Auth) |
-| Deployment | Railway (backend) + Vercel (frontend) |
+| Deployment | Render (backend) + Vercel (frontend) |
 
 ---
 
@@ -403,7 +403,13 @@ BoardChecklistItem.item_type   # hard | action | allstar | showcase | ...
 
 ## Deployment
 
-The production stack uses three managed services: **Neon** (PostgreSQL database), **Railway** (Django backend), and **Vercel** (React frontend). Deploy in that order — database first, then backend, then frontend.
+The production stack uses three managed services: **Neon** (PostgreSQL database), **Render** (Django backend), and **Vercel** (React frontend). Deploy in that order — database first, then backend, then frontend.
+
+**Production URLs**
+| Service | URL |
+|---|---|
+| Django Admin | `https://wtll-backend.onrender.com/admin/` |
+| Backend API | `https://wtll-backend.onrender.com/api/` |
 
 ---
 
@@ -529,7 +535,7 @@ Trigger a redeploy on Railway. This ensures API calls are accepted from your fro
 3. Go to **Settings → Site Settings** → toggle modules on/off for your league
 4. Go to **Settings → Users** → create accounts for coaches and board members (password shown once at creation)
 
-Alternatively, use the Django admin at `https://<railway-url>/admin/` with the superuser credentials you created in the console.
+Alternatively, use the Django admin at `https://wtll-backend.onrender.com/admin/` with the superuser credentials you created in the console.
 
 ---
 

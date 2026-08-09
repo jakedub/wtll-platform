@@ -227,6 +227,13 @@ export default function AppLayout({ children }: Props) {
         </Tooltip>
       )}
 
+      {/* Version — staff only */}
+      {user?.is_staff && (
+        <Typography sx={{ fontSize: "0.55rem", color: "rgba(255,255,255,0.25)", textAlign: "center", mb: 0.5, letterSpacing: "0.04em" }}>
+          v0.1.0
+        </Typography>
+      )}
+
       {/* Logout */}
       <Tooltip title={user ? `Sign out (${user.email})` : 'Sign out'} placement="right">
         <IconButton

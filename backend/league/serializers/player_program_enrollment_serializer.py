@@ -16,10 +16,13 @@ class PlayerProgramEnrollmentSerializer(serializers.ModelSerializer):
     """
 
     # Nested read-only detail
-    player_name = serializers.CharField(source="player.full_name", read_only=True)
-    program_name = serializers.CharField(source="program.name", read_only=True)
-    division_name = serializers.CharField(source="division.name", read_only=True)
-    team_name = serializers.CharField(source="team.name", read_only=True)
+    player_name        = serializers.CharField(source="player.full_name",          read_only=True)
+    program_name       = serializers.CharField(source="program.name",               read_only=True)
+    program_type_label = serializers.SerializerMethodField()
+    season_year        = serializers.IntegerField(source="program.season_year",     read_only=True)
+    season_closed      = serializers.BooleanField(source="program.season_closed",   read_only=True)
+    division_name      = serializers.CharField(source="division.name",              read_only=True)
+    team_name          = serializers.CharField(source="team.name",                  read_only=True)
 
     # Write-only ID fields
     player_id = serializers.PrimaryKeyRelatedField(
@@ -43,6 +46,9 @@ class PlayerProgramEnrollmentSerializer(serializers.ModelSerializer):
             # Read
             "player_name",
             "program_name",
+            "program_type_label",
+            "season_year",
+            "season_closed",
             "division_name",
             "team_name",
             # Write
@@ -53,6 +59,13 @@ class PlayerProgramEnrollmentSerializer(serializers.ModelSerializer):
             # Admin dropdown
             "label",
         ]
+
+    def get_program_type_label(self, obj):
+        from league.models.program import PROGRAM_TYPES
+        labels = dict(PROGRAM_TYPES)
+        if obj.program:
+            return labels.get(obj.program.program_type, obj.program.program_type)
+        return None
 
     def get_label(self, obj):
         division = obj.division.name if obj.division else "No Division"

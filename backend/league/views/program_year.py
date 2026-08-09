@@ -24,10 +24,13 @@ class DivisionSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "sport", "is_calendar_only"]
 
     def get_sport(self, obj):
+        # Name takes priority — "softball" in the division name is authoritative
+        # regardless of what the parent program's sport field says.
+        if "softball" in (obj.name or "").lower():
+            return "softball"
         if obj.program:
             return obj.program.sport
-        name = obj.name.lower()
-        return "softball" if "softball" in name else "baseball"
+        return "baseball"
 
 
 # ── Division CRUD under a program ─────────────────────────────────────────────

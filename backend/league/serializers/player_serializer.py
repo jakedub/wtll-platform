@@ -62,7 +62,25 @@ class PlayerSerializer(serializers.ModelSerializer):
         return obj.catcher_tier_computed
 
     def _latest_enrollment(self, obj):
-        return obj.enrollments.select_related("division", "team").order_by("-id").first()
+        # Prefer enrollment in a currently open program so that a player who
+        # finished Recreation but hasn't started Fall Ball yet still shows
+        # their active-season data rather than the closed-season team.
+        active = (
+            obj.enrollments
+            .select_related("division", "team", "program")
+            .filter(program__season_closed=False, program__is_active=True)
+            .order_by("-program__season_year", "-id")
+            .first()
+        )
+        if active:
+            return active
+        # Fall back to most recently created enrollment (could be closed season)
+        return (
+            obj.enrollments
+            .select_related("division", "team", "program")
+            .order_by("-program__season_year", "-id")
+            .first()
+        )
 
     def get_division_name(self, obj):
         """Return division name from the most recent active enrollment."""
