@@ -165,7 +165,7 @@ export default function PlayerImportPage() {
     setResult(null)
     try {
       const progId = selectedProgramId !== "" ? (selectedProgramId as number) : undefined
-      const data = await importPlayerCSV(selectedFile, "baseball", progId)
+      const data = await importPlayerCSV(selectedFile, progId)
       setResult(data)
     } catch (err: any) {
       const msg =
