@@ -54,6 +54,8 @@ from league.views.budget import (
     BudgetYearsView, BudgetCopyYearView,
 )
 from league.views.draft import (
+    BulkDraftExportView,
+    JerseyExportView,
     DraftListCreateView,
     DraftDetailView,
     DraftStateView,
@@ -255,6 +257,9 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
 
     # Drafts
     path("drafts/", DraftListCreateView.as_view(), name="draft-list"),
+    # New route for bulk exports
+    path("drafts/export/", BulkDraftExportView.as_view(), name="draft-bulk-export"),
+    path("drafts/jersey-export/", JerseyExportView.as_view(), name="jersey-export"),
     path("drafts/<int:pk>/", DraftDetailView.as_view(), name="draft-detail"),
     path("drafts/<int:pk>/state/", DraftStateView.as_view(), name="draft-state"),
     path("drafts/<int:pk>/available-players/", AvailablePlayersView.as_view(), name="draft-available"),
@@ -264,6 +269,7 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     path("drafts/<int:pk>/complete/", MarkDraftCompleteView.as_view(), name="draft-complete"),
     path("drafts/<int:pk>/export/", DraftExportView.as_view(), name="draft-export"),
     path("drafts/<int:pk>/auto-assign/", FallBallAutoAssignView.as_view(), name="draft-auto-assign"),
+
 
     # Evaluations
     path("evaluations/import/", EvaluationImportView.as_view(), name="evaluation-import"),

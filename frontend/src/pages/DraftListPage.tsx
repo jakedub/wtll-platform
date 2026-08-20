@@ -25,7 +25,9 @@ import {
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
 import SportsIcon from "@mui/icons-material/Sports"
-import { getDrafts, createDraft } from "../api/draft"
+import DownloadIcon from "@mui/icons-material/Download"
+import CheckroomIcon from "@mui/icons-material/Checkroom"
+import { getDrafts, createDraft, getSelectExportURL, getJerseyExportURL } from "../api/draft"
 import { getDivisions } from "../api/divisions"
 import type { Draft } from "../models/draft"
 
@@ -41,6 +43,10 @@ export default function DraftListPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [openExportDialog, setOpenExportDialog] = useState(false)
+  const [exportType, setExportType] = useState<"results" | "jersey">("results")
+  const [selectedExportDrafts, setSelectedExportDrafts] = useState<number[]>([])
+
   const [name, setName] = useState("")
   const [year, setYear] = useState(new Date().getFullYear())
   const [division, setDivision] = useState<number | "">("")
@@ -92,6 +98,32 @@ export default function DraftListPage() {
     }
   }
 
+  const handleOpenExportModal = (type: "results" | "jersey") => {
+    setExportType(type)
+    setSelectedExportDrafts([])
+    setOpenExportDialog(true)
+  }
+
+  const toggleSelectExportDraft = (id: number) => {
+    setSelectedExportDrafts((prev) =>
+      prev.includes(id) ? prev.filter((dId) => dId !== id) : [...prev, id]
+    )
+  }
+
+  const handleExport = () => {
+    if (!selectedExportDrafts.length) return
+    const url = exportType === "results" 
+      ? getSelectExportURL(selectedExportDrafts)
+      : getJerseyExportURL(selectedExportDrafts)
+
+    window.open(url, "_blank")
+    setOpenExportDialog(false)
+    setSelectedExportDrafts([])
+  }
+
+  // Filter completed drafts for export selection
+  const completedDrafts = drafts.filter((d) => d.is_complete)
+
   return (
     <Box>
       <Box sx={{ mb: 3 }}>
@@ -106,7 +138,24 @@ export default function DraftListPage() {
         </Typography>
       </Box>
 
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2.5 }}>
+      {/* Action Buttons Header */}
+      <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1.5, mb: 2.5 }}>
+        <Button
+          variant="outlined"
+          startIcon={<CheckroomIcon />}
+          onClick={() => handleOpenExportModal("jersey")}
+          sx={{ borderColor: "#444", color: "#333", "&:hover": { borderColor: "#111", bgcolor: "#f5f5f5" } }}
+        >
+          Export Jersey Roster
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<DownloadIcon />}
+          onClick={() => handleOpenExportModal("results")}
+          sx={{ borderColor: "#111", color: "#111", "&:hover": { borderColor: "#333", bgcolor: "#f5f5f5" } }}
+        >
+          Export Draft Results
+        </Button>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -169,6 +218,7 @@ export default function DraftListPage() {
         )}
       </Paper>
 
+      {/* Modal: New Draft */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>New Draft</DialogTitle>
         <DialogContent dividers>
@@ -193,6 +243,53 @@ export default function DraftListPage() {
             sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } }}
           >
             {creating ? "Creating…" : "Create & Open"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal: Bulk Export Selection */}
+      <Dialog open={openExportDialog} onClose={() => setOpenExportDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          {exportType === "results" ? "Export Draft Results" : "Export Jersey Rosters"}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ color: "#666", mb: 2 }}>
+            Select completed drafts to export into the Excel file:
+          </Typography>
+
+          {completedDrafts.length === 0 ? (
+            <Typography variant="body2" sx={{ color: "#888", italic: "true", py: 2 }}>
+              No completed drafts available for export.
+            </Typography>
+          ) : (
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              {completedDrafts.map((d) => {
+                const isSelected = selectedExportDrafts.includes(d.id)
+                return (
+                  <Chip
+                    key={d.id}
+                    label={`${d.name} (${d.year})`}
+                    clickable
+                    color={isSelected ? "primary" : "default"}
+                    variant={isSelected ? "filled" : "outlined"}
+                    onClick={() => toggleSelectExportDraft(d.id)}
+                    sx={isSelected ? { bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } } : {}}
+                  />
+                )
+              })}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setOpenExportDialog(false)} color="inherit">Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleExport}
+            disabled={selectedExportDrafts.length === 0}
+            startIcon={exportType === "jersey" ? <CheckroomIcon /> : <DownloadIcon />}
+            sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } }}
+          >
+            Export ({selectedExportDrafts.length})
           </Button>
         </DialogActions>
       </Dialog>

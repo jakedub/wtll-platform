@@ -532,3 +532,295 @@ class DraftExportView(APIView):
         resp = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp
+
+class BulkDraftExportView(APIView):
+    """
+    GET /api/drafts/export/?ids=1,2,3
+    Returns a consolidated multi-sheet XLSX file containing Draft Results 
+    and Jersey Roster sheets for each selected draft.
+    """
+
+    def get(self, request):
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            return Response({"error": "openpyxl not installed."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Parse comma-separated draft IDs from query parameters
+        ids_param = request.query_params.get("ids", "")
+        if not ids_param:
+            return Response({"error": "No draft IDs provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            draft_ids = [int(i.strip()) for i in ids_param.split(",") if i.strip().isdigit()]
+        except ValueError:
+            return Response({"error": "Invalid draft IDs provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        drafts = Draft.objects.filter(id__in=draft_ids).select_related("division")
+        if not drafts.exists():
+            return Response({"error": "No drafts found matching the provided IDs."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Excel Styling Setup
+        HEADER_FILL = PatternFill("solid", start_color="1F3864")
+        HEADER_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+        TEAM_FILL   = PatternFill("solid", start_color="D9E1F2")
+        TEAM_FONT   = Font(name="Arial", bold=True, size=10)
+        BODY_FONT   = Font(name="Arial", size=10)
+        CENTER      = Alignment(horizontal="center", vertical="center")
+        LEFT        = Alignment(horizontal="left", vertical="center")
+        thin        = Side(style="thin", color="BFBFBF")
+        BORDER      = Border(left=thin, right=thin, top=thin, bottom=thin)
+        JERSEY_SIZES = ["YXS", "YS", "YM", "YL", "YXL", "AS", "AM", "AL", "AXL", "AXXL"]
+
+        def style_header(ws, row, cols):
+            for c in range(1, cols + 1):
+                cell = ws.cell(row=row, column=c)
+                cell.font = HEADER_FONT; cell.fill = HEADER_FILL
+                cell.alignment = CENTER; cell.border = BORDER
+
+        def style_team(ws, row, cols):
+            for c in range(1, cols + 1):
+                cell = ws.cell(row=row, column=c)
+                cell.font = TEAM_FONT; cell.fill = TEAM_FILL; cell.border = BORDER
+
+        def style_body(ws, row, cols):
+            for c in range(1, cols + 1):
+                cell = ws.cell(row=row, column=c)
+                cell.font = BODY_FONT; cell.border = BORDER
+                cell.alignment = LEFT if c == 1 else CENTER
+
+        def set_widths(ws, widths):
+            for i, w in enumerate(widths, 1):
+                ws.column_dimensions[get_column_letter(i)].width = w
+
+        wb = Workbook()
+        wb.remove(wb.active)  # Remove default initial sheet
+
+        for draft in drafts:
+            # Clean tab title name length (Excel sheet names limit: 31 chars)
+            safe_draft_name = draft.name[:18].strip()
+
+            teams = Team.objects.filter(
+                id__in=DraftSelection.objects.filter(draft=draft).values_list("team_id", flat=True).distinct()
+            ).order_by("name")
+
+            # ── Sheet 1: Draft Results ─────────────────────────────────────────────
+            ws1 = wb.create_sheet(title=f"{safe_draft_name} Results"[:31])
+            COLS1 = ["Player Name", "Batting Hand", "Throwing Hand", "Jersey Size",
+                     "Tier", "Hitting", "Fielding", "Throwing", "Pitching", "Catcher", "Overall"]
+            N1 = len(COLS1)
+
+            ws1.merge_cells(start_row=1, start_column=1, end_row=1, end_column=N1)
+            tc = ws1.cell(row=1, column=1, value=f"{draft.name} — {draft.year} Draft Results")
+            tc.font = Font(name="Arial", bold=True, size=13); tc.alignment = CENTER
+            ws1.row_dimensions[1].height = 24
+
+            r = 2
+            for team in teams:
+                ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N1)
+                ws1.cell(row=r, column=1, value=f"{team.name}  |  Coach: {team.coach or '—'}  |  Asst: {team.assistant_coach or '—'}")
+                style_team(ws1, r, N1); ws1.row_dimensions[r].height = 18; r += 1
+
+                for c, label in enumerate(COLS1, 1):
+                    ws1.cell(row=r, column=c, value=label)
+                style_header(ws1, r, N1); ws1.row_dimensions[r].height = 16; r += 1
+
+                for sel in DraftSelection.objects.filter(draft=draft, team=team).select_related("player").order_by("selected_at"):
+                    p = sel.player
+                    ev = p.evaluations.filter(season_year=draft.year).first()
+                    row_vals = [
+                        f"{p.first_name} {p.last_name}",
+                        p.batting_hand or "", p.throwing_hand or "", p.jersey_size or "",
+                        getattr(ev, "tier_spot", "") or "",
+                        getattr(ev, "total_hitting", "") if ev else "",
+                        getattr(ev, "total_fielding", "") if ev else "",
+                        getattr(ev, "total_throwing", "") if ev else "",
+                        getattr(ev, "total_pitching", "") if ev else "",
+                        getattr(ev, "total_catcher", "") if ev else "",
+                        getattr(ev, "overall_total", "") if ev else "",
+                    ]
+                    for c, val in enumerate(row_vals, 1):
+                        ws1.cell(row=r, column=c, value=val)
+                    style_body(ws1, r, N1); r += 1
+                r += 1
+
+            set_widths(ws1, [26, 12, 13, 11, 6, 8, 8, 9, 9, 9, 9])
+
+            # ── Sheet 2: Jersey Roster Sheet ───────────────────────────────────────
+            ws2 = wb.create_sheet(title=f"{safe_draft_name} Roster"[:31])
+            N2 = 4 + len(JERSEY_SIZES)
+
+            ws2.merge_cells(start_row=1, start_column=1, end_row=1, end_column=N2)
+            tc2 = ws2.cell(row=1, column=1, value=f"{draft.name} — {draft.year} Roster Sheet")
+            tc2.font = Font(name="Arial", bold=True, size=13); tc2.alignment = CENTER
+            ws2.row_dimensions[1].height = 24
+
+            r = 2
+            divisions = Division.objects.filter(
+                id__in=teams.values_list("division_id", flat=True).distinct()
+            ).order_by("name")
+
+            for div in divisions:
+                ws2.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N2)
+                dc = ws2.cell(row=r, column=1, value=f"Division: {div.name}")
+                dc.font = Font(name="Arial", bold=True, size=11, color="FFFFFF")
+                dc.fill = PatternFill("solid", start_color="2E4057"); dc.alignment = LEFT
+                ws2.row_dimensions[r].height = 18; r += 1
+
+                for c, h in enumerate(["Team Name", "Jersey Color", "Coach", "Asst Coach"] + JERSEY_SIZES, 1):
+                    ws2.cell(row=r, column=c, value=h)
+                style_header(ws2, r, N2); ws2.row_dimensions[r].height = 16; r += 1
+
+                for team in teams.filter(division_id=div.id):
+                    sizes = {s: 0 for s in JERSEY_SIZES}
+                    for sel in DraftSelection.objects.filter(draft=draft, team=team).select_related("player"):
+                        sz = (sel.player.jersey_size or "").upper().strip()
+                        if sz in sizes:
+                            sizes[sz] += 1
+
+                    ws2.cell(row=r, column=1, value=team.name)
+                    ws2.cell(row=r, column=2, value=team.jersey_color or "—")
+                    ws2.cell(row=r, column=3, value=team.coach or "—")
+                    ws2.cell(row=r, column=4, value=team.assistant_coach or "—")
+                    for i, sz in enumerate(JERSEY_SIZES, 5):
+                        cnt = sizes[sz]
+                        ws2.cell(row=r, column=i, value=cnt if cnt > 0 else "")
+                    style_body(ws2, r, N2); r += 1
+                r += 1
+
+            set_widths(ws2, [22, 14, 20, 20] + [7] * len(JERSEY_SIZES))
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        
+        filename = "selected_draft_exports.xlsx" if len(drafts) > 1 else f"draft_{drafts[0].name.replace(' ', '_')}_{drafts[0].year}.xlsx"
+        resp = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp
+
+class JerseyExportView(APIView):
+    """
+    GET /api/drafts/jersey-export/?ids=1,2,3
+    Returns a single-sheet XLSX file named "Jersey Count" containing jersey roster counts
+    aggregated across all selected drafts.
+    """
+
+    def get(self, request):
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            return Response({"error": "openpyxl not installed."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Parse comma-separated draft IDs from query parameters
+        ids_param = request.query_params.get("ids", "")
+        if not ids_param:
+            return Response({"error": "No draft IDs provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            draft_ids = [int(i.strip()) for i in ids_param.split(",") if i.strip().isdigit()]
+        except ValueError:
+            return Response({"error": "Invalid draft IDs provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        drafts = Draft.objects.filter(id__in=draft_ids).select_related("division")
+        if not drafts.exists():
+            return Response({"error": "No drafts found matching the provided IDs."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Excel Styling Setup
+        HEADER_FILL = PatternFill("solid", start_color="1F3864")
+        HEADER_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+        BODY_FONT   = Font(name="Arial", size=10)
+        CENTER      = Alignment(horizontal="center", vertical="center")
+        LEFT        = Alignment(horizontal="left", vertical="center")
+        thin        = Side(style="thin", color="BFBFBF")
+        BORDER      = Border(left=thin, right=thin, top=thin, bottom=thin)
+        JERSEY_SIZES = ["YXS", "YS", "YM", "YL", "YXL", "AS", "AM", "AL", "AXL", "AXXL"]
+
+        def style_header(ws, row, cols):
+            for c in range(1, cols + 1):
+                cell = ws.cell(row=row, column=c)
+                cell.font = HEADER_FONT; cell.fill = HEADER_FILL
+                cell.alignment = CENTER; cell.border = BORDER
+
+        def style_body(ws, row, cols):
+            for c in range(1, cols + 1):
+                cell = ws.cell(row=row, column=c)
+                cell.font = BODY_FONT; cell.border = BORDER
+                cell.alignment = LEFT if c == 1 else CENTER
+
+        def set_widths(ws, widths):
+            for i, w in enumerate(widths, 1):
+                ws.column_dimensions[get_column_letter(i)].width = w
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Jersey Count"
+        
+        N = 4 + len(JERSEY_SIZES)
+        r = 1
+
+        for draft in drafts:
+            # Title block for each draft section
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N)
+            tc = ws.cell(row=r, column=1, value=f"{draft.name} — {draft.year} Roster Sheet")
+            tc.font = Font(name="Arial", bold=True, size=13)
+            tc.alignment = CENTER
+            ws.row_dimensions[r].height = 24
+            r += 1
+
+            teams = Team.objects.filter(
+                id__in=DraftSelection.objects.filter(draft=draft).values_list("team_id", flat=True).distinct()
+            ).order_by("name")
+
+            divisions = Division.objects.filter(
+                id__in=teams.values_list("division_id", flat=True).distinct()
+            ).order_by("name")
+
+            for div in divisions:
+                ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N)
+                dc = ws.cell(row=r, column=1, value=f"Division: {div.name}")
+                dc.font = Font(name="Arial", bold=True, size=11, color="FFFFFF")
+                dc.fill = PatternFill("solid", start_color="2E4057")
+                dc.alignment = LEFT
+                ws.row_dimensions[r].height = 18
+                r += 1
+
+                for c, h in enumerate(["Team Name", "Jersey Color", "Coach", "Asst Coach"] + JERSEY_SIZES, 1):
+                    ws.cell(row=r, column=c, value=h)
+                style_header(ws, r, N)
+                ws.row_dimensions[r].height = 16
+                r += 1
+
+                for team in teams.filter(division_id=div.id):
+                    sizes = {s: 0 for s in JERSEY_SIZES}
+                    for sel in DraftSelection.objects.filter(draft=draft, team=team).select_related("player"):
+                        sz = (sel.player.jersey_size or "").upper().strip()
+                        if sz in sizes:
+                            sizes[sz] += 1
+
+                    ws.cell(row=r, column=1, value=team.name)
+                    ws.cell(row=r, column=2, value=team.jersey_color or "—")
+                    ws.cell(row=r, column=3, value=team.coach or "—")
+                    ws.cell(row=r, column=4, value=team.assistant_coach or "—")
+                    for i, sz in enumerate(JERSEY_SIZES, 5):
+                        cnt = sizes[sz]
+                        ws.cell(row=r, column=i, value=cnt if cnt > 0 else "")
+                    style_body(ws, r, N)
+                    r += 1
+                r += 1
+            r += 1
+
+        set_widths(ws, [22, 14, 20, 20] + [7] * len(JERSEY_SIZES))
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        
+        filename = "jersey_count_export.xlsx"
+        resp = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp

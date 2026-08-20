@@ -58,3 +58,20 @@ export function getDraftExportURL(draftId: number): string {
   const base = (client.defaults.baseURL ?? "").replace(/\/$/, "")
   return `${base}/drafts/${draftId}/export/`
 }
+export function getSelectExportURL(draftIds: number[]): string {
+  const base = (client.defaults.baseURL ?? "").replace(/\/$/, "")
+  const ids = draftIds.join(",")
+  return `${base}/drafts/export/?ids=${encodeURIComponent(ids)}`
+}
+
+// Alternatively, export all completed drafts filtered by completion status
+export function getAllCompletedExportsURL(): string {
+  const base = (client.defaults.baseURL ?? "").replace(/\/$/, "")
+  return `${base}/drafts/export/?status=completed`
+}
+
+export function getJerseyExportURL(draftIds: number[]): string {
+  const base = (client.defaults.baseURL ?? "").replace(/\/$/, "")
+  const ids = draftIds.join(",")
+  return `${base}/drafts/jersey-export/?ids=${encodeURIComponent(ids)}`
+}
