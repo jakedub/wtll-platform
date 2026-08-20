@@ -64,6 +64,7 @@ const PROGRAM_DIVISION_DEFAULTS: Record<string, { name: string; sport: "baseball
     { name: "Fall AA",                 sport: "baseball" },
     { name: "Fall AAA",                sport: "baseball" },
     { name: "Fall Majors",             sport: "baseball" },
+    { name: "Fall Baseball Combined",             sport: "baseball" },
     { name: "Fall Softball Minors",    sport: "softball" },
     { name: "Fall Softball Majors",    sport: "softball" },
     { name: "Fall Softball Combined",  sport: "softball" },

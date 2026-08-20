@@ -4,7 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      jsxImportSource: '@emotion/react',
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'pwa-192.png', 'pwa-512.png'],
@@ -65,19 +67,16 @@ export default defineConfig({
     }
   },
   resolve: {
-    dedupe: ['@emotion/react', '@emotion/styled', '@mui/material'],
+    dedupe: ['react', 'react-dom', '@emotion/react', '@emotion/styled', '@mui/material'],
   },
   optimizeDeps: {
     include: [
-      '@mui/material',
-      '@mui/material/styles',
-      '@mui/material/Accordion',
-      '@mui/material/AccordionSummary',
-      '@mui/material/AccordionDetails',
-      '@mui/icons-material',
       '@emotion/react',
       '@emotion/styled',
+      '@mui/material',
+      '@mui/icons-material',
     ],
+    exclude: [],
     force: true,
   },
   build: {

@@ -15,6 +15,7 @@ DIVISION_MAP = {
     "Minor - Coach/Machine Pitch - Little League Baseball": "AA",
     "Minor - Coach Pitch - Pee Wee":          "Pee Wee",
     "PeeWee - Little League Baseball": "Pee Wee",
+    "Minor - AA/AAA Combined - Little League Baseball": "Baseball Combined",
     "Tee Ball Clinics":                       "Tee Ball",
     # Softball (2026)
     "Major - Player Pitch (Ages 11-12)":      "Softball Majors",
@@ -49,6 +50,7 @@ PROGRAM_CANONICAL_TO_DIVISION: dict[str, dict[str, str]] = {
         "AAA":            "Fall AAA",
         "AA":             "Fall AA",
         "Pee Wee":        "Fall PeeWee",
+        "Baseball Combined": "Fall Baseball Combined",
         "Softball Majors":   "Fall Softball Majors",
         "Softball Minors":   "Fall Softball Minors",
         "Softball Combined": "Fall Softball Combined",
