@@ -1,5 +1,7 @@
 # league/views/umpire.py
 
+import re
+
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -10,8 +12,10 @@ from league.models.umpire_signup import UmpireSignup
 from league.models.public_signup_config import PublicSignupConfig
 from league.serializers.umpire_serializer import UmpireGameSerializer, UmpireSignupSerializer
 
-# Division names that require umpires
-UMPIRE_DIVISIONS = ["AAA", "Majors"]
+# Division names that require umpires. Matched as whole words so this
+# catches combined/seasonal division names too, e.g. "Fall AA/AAA",
+# "Spring Majors", without also matching "AAAA".
+UMPIRE_DIVISION_PATTERN = re.compile(r"\b(AAA|Majors)\b", re.IGNORECASE)
 
 
 class UmpireGameListView(APIView):
@@ -33,7 +37,7 @@ class UmpireGameListView(APIView):
             .prefetch_related("umpire_signups")
             .filter(
                 event_type="GAME",
-                team__division__name__in=UMPIRE_DIVISIONS,
+                team__division__name__iregex=r"\y(AAA|Majors)\y",
                 is_cancelled=False,
             )
             .order_by("start_time")

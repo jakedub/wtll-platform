@@ -1,5 +1,6 @@
 # league/services/calendar_ingestion.py
 
+import hashlib
 import requests
 from icalendar import Calendar
 from django.utils.timezone import make_aware
@@ -79,6 +80,23 @@ def parse_field_info(description: str):
         "field_name": field_name,
         "field_id": field_id,
     }
+def build_stable_external_id(team_id, start, location):
+    """
+    Blue Sombrero (and similar iCal providers) bake the export timestamp
+    into their UID, so the UID is different on every single sync. Using
+    it as the dedup key means every sync creates brand new duplicate
+    events instead of updating the existing ones.
+
+    Build our own stable key from things that do not change between
+    syncs for the same real world event: team, start time, and location.
+    Title is deliberately excluded because it can change (TBD becomes a
+    real opponent name, CANCELED prefix gets added, etc) without it
+    being a different event.
+    """
+    raw = f"{team_id}|{start.isoformat() if start else ''}|{(location or '').strip().lower()}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def to_datetime(dt):
     """
     ICS dates can be date or datetime.
@@ -108,9 +126,6 @@ def sync_team_calendar(team_calendar):
         if component.name != "VEVENT":
             continue
 
-        external_id = str(component.get("UID") or "").strip()
-        if not external_id:
-            continue
         title = str(component.get("SUMMARY") or "Untitled Event")
 
         start = to_datetime(component.get("DTSTART").dt)
@@ -118,6 +133,12 @@ def sync_team_calendar(team_calendar):
         end = to_datetime(end) if end else None
 
         location = str(component.get("LOCATION") or "")
+
+        # Do not trust the provider's UID for dedup — some providers
+        # (Blue Sombrero included) regenerate it on every export.
+        external_id = build_stable_external_id(team_calendar.team_id, start, location)
+        if not start:
+            continue
         description = str(component.get("DESCRIPTION") or "")
         field_info = parse_field_info(description)
         field = field_info["field_name"]
