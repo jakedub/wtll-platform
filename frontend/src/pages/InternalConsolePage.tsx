@@ -24,6 +24,7 @@ import { useAuth } from "../context/AuthContext"
 
 interface ManagedUser {
   id: number
+  username: string
   email: string
   is_staff: boolean
   is_board_member: boolean
@@ -194,7 +195,7 @@ function UsersPanel({ refreshKey }: { refreshKey: number }) {
               </Typography>
               {lastLogins.map(u => (
                 <Box key={u.id} sx={{ display: "flex", justifyContent: "space-between", py: 0.5 }}>
-                  <Typography sx={{ fontSize: "0.75rem", color: "#555" }}>{u.email}</Typography>
+                  <Typography sx={{ fontSize: "0.75rem", color: "#555" }}>{u.username}</Typography>
                   <Typography sx={{ fontSize: "0.75rem", color: "#aaa" }}>{formatDate(u.last_login)}</Typography>
                 </Box>
               ))}
@@ -314,7 +315,7 @@ export default function InternalConsolePage() {
           <Box>
             <Typography variant="h5" fontWeight={700}>Internal Console</Typography>
             <Typography variant="body2" color="text.secondary">
-              Signed in as {user?.email} · staff only
+              Signed in as {user?.username} · staff only
             </Typography>
           </Box>
         </Box>

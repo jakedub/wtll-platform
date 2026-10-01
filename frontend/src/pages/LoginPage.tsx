@@ -1,5 +1,5 @@
 /**
- * LoginPage — email + password login.
+ * LoginPage — username + password login.
  * Magic-link (passwordless) flow commented out pending email provider setup.
  */
 import { useState } from "react"
@@ -19,28 +19,28 @@ import { useAuth } from "../context/AuthContext"
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim() || !password) return
+    if (!username.trim() || !password) return
 
     setLoading(true)
     setError(null)
 
     try {
       const res = await client.post("/auth/login/", {
-        email: email.trim().toLowerCase(),
+        username: username.trim(),
         password,
       })
       login(res.data.token, res.data.user)
       navigate("/", { replace: true })
     } catch (err: any) {
       setError(
-        err?.response?.data?.error ?? "Invalid email or password."
+        err?.response?.data?.error ?? "Invalid username or password."
       )
     } finally {
       setLoading(false)
@@ -101,7 +101,7 @@ export default function LoginPage() {
             Sign in
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Enter your email and password to access the platform.
+            Enter your username and password to access the platform.
           </Typography>
 
           {error && (
@@ -112,14 +112,13 @@ export default function LoginPage() {
 
           <TextField
             fullWidth
-            label="Email address"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            label="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             autoFocus
             required
             sx={{ mb: 2 }}
-            inputProps={{ autoComplete: "email" }}
+            inputProps={{ autoComplete: "username" }}
           />
 
           <TextField
@@ -137,7 +136,7 @@ export default function LoginPage() {
             fullWidth
             type="submit"
             variant="contained"
-            disabled={loading || !email.trim() || !password}
+            disabled={loading || !username.trim() || !password}
             sx={{
               bgcolor: "#C41230",
               "&:hover": { bgcolor: "#a50f29" },

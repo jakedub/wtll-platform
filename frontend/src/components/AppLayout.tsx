@@ -235,7 +235,7 @@ export default function AppLayout({ children }: Props) {
       )}
 
       {/* Logout */}
-      <Tooltip title={user ? `Sign out (${user.email})` : 'Sign out'} placement="right">
+      <Tooltip title={user ? `Sign out (${user.username})` : 'Sign out'} placement="right">
         <IconButton
           onClick={logout}
           sx={{

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from decouple import config
 import dj_database_url
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -49,6 +50,16 @@ INSTALLED_APPS = [
     "league",
     "drf_spectacular"
 ]
+
+# Load environment variables from backend/.env
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+# Blue Sombrero / AWS Cognito Settings
+BLUE_SOMBRERO_USERNAME = os.getenv('BLUE_SOMBRERO_USERNAME')
+BLUE_SOMBRERO_PASSWORD = os.getenv('BLUE_SOMBRERO_PASSWORD')
+BLUE_SOMBRERO_COGNITO_CLIENT_ID = os.getenv('BLUE_SOMBRERO_COGNITO_CLIENT_ID', '572but04so1ovl883vi2j95vpj')
+BLUE_SOMBRERO_USER_POOL_ID = os.getenv('BLUE_SOMBRERO_USER_POOL_ID', 'us-east-1_07pS53A1N')
+AWS_COGNITO_REGION = os.getenv('AWS_COGNITO_REGION', 'us-east-1')
 
 # ─── Middleware ───────────────────────────────────────────────────────────────
 

@@ -2,8 +2,8 @@
 Authentication views.
 
 Active:
-  1. POST /api/auth/login/          { "email": "...", "password": "..." }
-     → Authenticates with email + password, returns a DRF auth token.
+  1. POST /api/auth/login/          { "username": "...", "password": "..." }
+     → Authenticates with username + password, returns a DRF auth token.
 
   2. GET  /api/auth/me/             (requires Authorization: Token <token>)
      → Returns current user's profile and linked teams.
@@ -44,35 +44,26 @@ def _get_or_create_auth_token(user):
 class PasswordLoginView(APIView):
     """
     POST /api/auth/login/
-    Body: { "email": "...", "password": "..." }
-    Authenticates with email + password and returns a DRF auth token.
+    Body: { "username": "...", "password": "..." }
+    Authenticates with username + password and returns a DRF auth token.
     """
     authentication_classes = []
     permission_classes = []
 
     def post(self, request):
-        email = (request.data.get("email") or "").lower().strip()
+        username = (request.data.get("username") or "").strip()
         password = request.data.get("password") or ""
 
-        if not email or not password:
+        if not username or not password:
             return Response(
-                {"error": "Email and password are required."},
+                {"error": "Username and password are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # Look up by email to get the actual username, then authenticate.
-        # Users created via createsuperuser may have a different username.
-        from league.models import User
-        try:
-            user_obj = User.objects.get(email=email)
-            username = user_obj.username
-        except User.DoesNotExist:
-            username = email  # will fail authenticate(), returns clean 401
 
         user = authenticate(request, username=username, password=password)
         if user is None:
             return Response(
-                {"error": "Invalid email or password."},
+                {"error": "Invalid username or password."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
@@ -162,6 +153,7 @@ class LogoutView(APIView):
 def _serialize_user(user, *, include_teams: bool = True) -> dict:
     d = {
         "id": user.id,
+        "username": user.username,
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
@@ -232,18 +224,20 @@ class UserListView(IsAdminUser, APIView):
         if err:
             return err
         from league.models import User
-        users = User.objects.all().order_by("email")
+        users = User.objects.all().order_by("username")
         return Response([_serialize_user(u, include_teams=False) for u in users])
 
 
 class UserInviteView(IsAdminUser, APIView):
     """
     POST /api/auth/users/invite/
-    Body: { email, first_name, last_name, is_board_member, is_coach, is_umpire }
+    Body: { username, email (optional), password (optional), first_name, last_name,
+            is_board_member, is_coach, is_umpire }
 
-    Creates the user (or updates roles if email already exists) and generates
-    a random temporary password. The password is returned once in the response
-    so the admin can share it with the user out-of-band.
+    Creates the user (or updates roles if username already exists). If a
+    password is supplied the admin sets it directly; otherwise a random
+    12-character one is generated. Either way the password is returned once
+    in the response so the admin can share it with the user out-of-band.
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -258,19 +252,23 @@ class UserInviteView(IsAdminUser, APIView):
 
         from league.models import User
 
+        username = (request.data.get("username") or "").strip()
+        if not username:
+            return Response({"error": "A username is required."}, status=status.HTTP_400_BAD_REQUEST)
+
         email = (request.data.get("email") or "").lower().strip()
-        if not email or "@" not in email:
-            return Response({"error": "A valid email address is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Find or create the user
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(username=username)
             created = False
         except User.DoesNotExist:
-            user = User.objects.create_user(username=email, email=email, password=None)
+            user = User.objects.create_user(username=username, email=email, password=None)
             created = True
 
         # Update fields
+        if email:
+            user.email = email
         user.first_name = request.data.get("first_name", user.first_name) or ""
         user.last_name = request.data.get("last_name", user.last_name) or ""
         user.is_board_member = bool(request.data.get("is_board_member", user.is_board_member))
@@ -278,14 +276,21 @@ class UserInviteView(IsAdminUser, APIView):
         user.is_umpire = bool(request.data.get("is_umpire", user.is_umpire))
         user.is_active = True
 
-        # Generate a random 12-character password (letters + digits)
-        alphabet = string.ascii_letters + string.digits
-        generated_password = "".join(secrets.choice(alphabet) for _ in range(12))
-        user.set_password(generated_password)
+        password = (request.data.get("password") or "").strip()
+        if password and len(password) < 8:
+            return Response(
+                {"error": "Password must be at least 8 characters."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not password:
+            # Generate a random 12-character password (letters + digits)
+            alphabet = string.ascii_letters + string.digits
+            password = "".join(secrets.choice(alphabet) for _ in range(12))
+        user.set_password(password)
         user.save()
 
         data = _serialize_user(user, include_teams=False)
-        data["generated_password"] = generated_password  # shown once to admin
+        data["generated_password"] = password  # shown once to admin
 
         return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
@@ -336,3 +341,57 @@ class UserDetailView(IsAdminUser, APIView):
         user.is_active = False
         user.save(update_fields=["is_active"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class UserSetPasswordView(IsAdminUser, APIView):
+    """
+    POST /api/auth/users/<pk>/set-password/
+    Body: { "password": "..." }   (optional)
+
+    Admin only. Sets the user's password directly to the given value, or,
+    if no password is supplied, generates a random 12-character one. The
+    password is returned once in the response so the admin can share it
+    with the user out-of-band — same pattern as the invite flow.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        import secrets
+        import string
+
+        err = self._require_admin(request)
+        if err:
+            return err
+
+        from league.models import User
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        password = (request.data.get("password") or "").strip()
+        generated = False
+        if not password:
+            alphabet = string.ascii_letters + string.digits
+            password = "".join(secrets.choice(alphabet) for _ in range(12))
+            generated = True
+        elif len(password) < 8:
+            return Response(
+                {"error": "Password must be at least 8 characters."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(password)
+        user.save(update_fields=["password"])
+
+        # Setting a password server-side invalidates any existing session,
+        # so issue a fresh auth token the next time this user logs in by
+        # dropping the old one rather than leaving a stale token active.
+        from rest_framework.authtoken.models import Token
+        Token.objects.filter(user=user).delete()
+
+        data = _serialize_user(user, include_teams=False)
+        if generated:
+            data["generated_password"] = password  # shown once to admin
+        return Response(data)

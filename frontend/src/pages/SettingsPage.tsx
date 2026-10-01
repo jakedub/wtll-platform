@@ -36,6 +36,7 @@ import { useAppSettings } from "../context/AppSettingsContext"
 
 interface ManagedUser {
   id: number
+  username: string
   email: string
   first_name: string
   last_name: string
@@ -56,7 +57,7 @@ const ROLE_CHIPS: { key: keyof ManagedUser; label: string; color: string; bg: st
 ]
 
 const EMPTY_INVITE = {
-  email: "", first_name: "", last_name: "",
+  username: "", email: "", first_name: "", last_name: "", password: "",
   is_board_member: false, is_coach: false, is_umpire: false,
 }
 
@@ -98,7 +99,8 @@ function InviteDialog({ open, onClose, onInvited }: {
   }, [open])
 
   const send = async () => {
-    if (!form.email.trim()) { setError("Email is required."); return }
+    if (!form.username.trim()) { setError("Username is required."); return }
+    if (form.password && form.password.length < 8) { setError("Password must be at least 8 characters."); return }
     setSaving(true); setError(null)
     try {
       const res = await client.post("/auth/users/invite/", form)
@@ -131,7 +133,7 @@ function InviteDialog({ open, onClose, onInvited }: {
           <Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
               <CheckIcon sx={{ color: "#2e7d32" }} />
-              <Typography fontWeight={700}>Account created for {form.email}</Typography>
+              <Typography fontWeight={700}>Account created for {form.username}</Typography>
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Share this temporary password with the user. It won't be shown again.
@@ -159,7 +161,14 @@ function InviteDialog({ open, onClose, onInvited }: {
             {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
 
             <TextField
-              label="Email address *" size="small" fullWidth
+              label="Username *" size="small" fullWidth
+              value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
+              placeholder="jcoach"
+              InputProps={{ startAdornment: <InputAdornment position="start"><PersonIcon sx={{ fontSize: 16, color: "#aaa" }} /></InputAdornment> }}
+            />
+
+            <TextField
+              label="Email (optional)" size="small" fullWidth
               value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
               placeholder="coach@example.com"
               InputProps={{ startAdornment: <InputAdornment position="start"><MailOutlineIcon sx={{ fontSize: 16, color: "#aaa" }} /></InputAdornment> }}
@@ -171,6 +180,13 @@ function InviteDialog({ open, onClose, onInvited }: {
               <TextField label="Last Name" size="small" value={form.last_name}
                 onChange={e => setForm(p => ({ ...p, last_name: e.target.value }))} />
             </Box>
+
+            <TextField
+              label="Password (optional)" size="small" fullWidth
+              value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+              placeholder="Leave blank to auto generate one"
+              helperText="At least 8 characters. Leave blank and one will be generated for you."
+            />
 
             <Box>
               <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", mb: 1 }}>
@@ -205,7 +221,7 @@ function InviteDialog({ open, onClose, onInvited }: {
         ) : (
           <>
             <Button onClick={onClose} color="inherit" sx={{ color: "#888" }}>Cancel</Button>
-            <Button variant="contained" onClick={send} disabled={saving || !form.email.trim()}
+            <Button variant="contained" onClick={send} disabled={saving || !form.username.trim()}
               startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <PersonIcon />}
               sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#a50e26" }, fontWeight: 700 }}>
               Create Account
@@ -229,9 +245,49 @@ function UserRow({ user, currentUserId, onUpdated }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [showResetPassword, setShowResetPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState("")
+  const [resettingPassword, setResettingPassword] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
+  const [resetResult, setResetResult] = useState<string | null>(null)
+  const [resetCopied, setResetCopied] = useState(false)
+
   useEffect(() => {
-    if (!expanded) setDraft({ ...user })
+    if (!expanded) {
+      setDraft({ ...user })
+      setShowResetPassword(false)
+      setNewPassword("")
+      setResetError(null)
+      setResetResult(null)
+    }
   }, [expanded, user])
+
+  const resetPassword = async () => {
+    if (newPassword && newPassword.length < 8) {
+      setResetError("Password must be at least 8 characters.")
+      return
+    }
+    setResettingPassword(true); setResetError(null)
+    try {
+      const res = await client.post(`/auth/users/${user.id}/set-password/`, {
+        password: newPassword || undefined,
+      })
+      setResetResult(res.data.generated_password ?? newPassword)
+      setNewPassword("")
+    } catch (e: any) {
+      setResetError(e?.response?.data?.error ?? "Failed to reset password.")
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
+  const copyResetResult = () => {
+    if (!resetResult) return
+    navigator.clipboard.writeText(resetResult).then(() => {
+      setResetCopied(true)
+      setTimeout(() => setResetCopied(false), 2000)
+    })
+  }
 
   const save = async () => {
     setSaving(true); setError(null)
@@ -276,7 +332,9 @@ function UserRow({ user, currentUserId, onUpdated }: {
             {[user.first_name, user.last_name].filter(Boolean).join(" ") || <em style={{ color: "#aaa" }}>No name</em>}
             {isSelf && <Chip label="You" size="small" sx={{ ml: 1, height: 16, fontSize: "0.6rem", bgcolor: "#e8f5e9", color: "#2e7d32" }} />}
           </Typography>
-          <Typography sx={{ fontSize: "0.72rem", color: "#888" }}>{user.email}</Typography>
+          <Typography sx={{ fontSize: "0.72rem", color: "#888" }}>
+            {user.username}{user.email ? ` · ${user.email}` : ""}
+          </Typography>
         </Box>
         <RoleChips user={user} />
         <Typography sx={{ fontSize: "0.75rem", color: "#aaa" }}>
@@ -346,7 +404,7 @@ function UserRow({ user, currentUserId, onUpdated }: {
             />
           )}
 
-          <Box sx={{ display: "flex", gap: 1 }}>
+          <Box sx={{ display: "flex", gap: 1, mb: showResetPassword ? 2 : 0 }}>
             <Button size="small" variant="contained" onClick={save} disabled={saving}
               startIcon={saving ? <CircularProgress size={12} color="inherit" /> : <CheckIcon />}
               sx={{ bgcolor: "#1565c0", "&:hover": { bgcolor: "#0d47a1" }, fontSize: "0.78rem" }}>
@@ -357,7 +415,60 @@ function UserRow({ user, currentUserId, onUpdated }: {
               sx={{ fontSize: "0.78rem", color: "#888" }}>
               Cancel
             </Button>
+            {!showResetPassword && (
+              <Button size="small" onClick={() => setShowResetPassword(true)}
+                sx={{ fontSize: "0.78rem", color: "#C41230", ml: "auto" }}>
+                Reset Password
+              </Button>
+            )}
           </Box>
+
+          {showResetPassword && (
+            <Box sx={{ pt: 1.5, borderTop: "1px dashed #ddd" }}>
+              <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", mb: 1 }}>
+                Reset Password
+              </Typography>
+
+              {resetResult ? (
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Share this password with the user. It won't be shown again.
+                  </Typography>
+                  <Box sx={{
+                    display: "flex", alignItems: "center", gap: 1,
+                    bgcolor: "#fff", border: "1px solid #e0e0e0",
+                    borderRadius: 2, px: 2, py: 1,
+                  }}>
+                    <Typography sx={{ fontFamily: "monospace", fontSize: "1rem", fontWeight: 700, flex: 1, letterSpacing: 1 }}>
+                      {resetResult}
+                    </Typography>
+                    <Button size="small" onClick={copyResetResult}
+                      sx={{ minWidth: 70, fontWeight: 700, fontSize: "0.72rem", color: resetCopied ? "#2e7d32" : "#C41230" }}>
+                      {resetCopied ? "Copied" : "Copy"}
+                    </Button>
+                  </Box>
+                </Box>
+              ) : (
+                <>
+                  {resetError && <Alert severity="error" sx={{ mb: 1, py: 0.5 }}>{resetError}</Alert>}
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                    <TextField
+                      size="small" fullWidth
+                      label="New password (optional)"
+                      placeholder="Leave blank to auto generate one"
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                    />
+                    <Button size="small" variant="contained" onClick={resetPassword} disabled={resettingPassword}
+                      startIcon={resettingPassword ? <CircularProgress size={12} color="inherit" /> : undefined}
+                      sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#a50e26" }, fontSize: "0.78rem", flexShrink: 0, mt: "4px" }}>
+                      Set Password
+                    </Button>
+                  </Box>
+                </>
+              )}
+            </Box>
+          )}
         </Box>
       )}
     </Box>
@@ -888,7 +999,7 @@ export default function SettingsPage() {
       if (existing >= 0) {
         const next = [...prev]; next[existing] = u; return next
       }
-      return [...prev, u].sort((a, b) => a.email.localeCompare(b.email))
+      return [...prev, u].sort((a, b) => a.username.localeCompare(b.username))
     })
   }
 
@@ -900,6 +1011,7 @@ export default function SettingsPage() {
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return (
+      u.username.toLowerCase().includes(q) ||
       u.email.toLowerCase().includes(q) ||
       u.first_name.toLowerCase().includes(q) ||
       u.last_name.toLowerCase().includes(q)
@@ -939,7 +1051,7 @@ export default function SettingsPage() {
           {/* Toolbar */}
           <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
             <TextField
-              size="small" placeholder="Search by name or email…"
+              size="small" placeholder="Search by name, username or email…"
               value={search} onChange={e => setSearch(e.target.value)}
               sx={{ flex: 1, minWidth: 200 }}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: "#aaa" }} /></InputAdornment> }}

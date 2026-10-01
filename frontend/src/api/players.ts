@@ -83,3 +83,8 @@ export async function importPlayerCSV(
   })
   return res.data
 }
+
+export async function syncReport(): Promise<any> {
+  const res = await client.post("/players/sync-report/");
+  return unwrap(res);
+}

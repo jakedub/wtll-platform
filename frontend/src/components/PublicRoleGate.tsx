@@ -81,7 +81,7 @@ export default function PublicRoleGate({ requires, children }: Props) {
             Access restricted
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Your account ({user.email}) doesn't have permission to view this page.
+            Your account ({user.username}) doesn't have permission to view this page.
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Contact a WTLL admin if you believe this is a mistake.

@@ -37,6 +37,7 @@ from league.views.evaluation_event import (
     DivisionsByProgramView,
 )
 from league.views.team_crud import TeamCreateView, TeamUpdateDeleteView
+from league.views.sync_report import SyncReportViewSet
 from league.views.team_calendar_manage import TeamCalendarListCreateView, TeamCalendarDetailView
 from league.views.team_manage import (
     TeamManageListView, TeamManageDetailView,
@@ -101,7 +102,7 @@ from league.views.vendors import (
 from league.views.sibling_check import SiblingCheckView
 from league.views.auth import (
     PasswordLoginView, MeView, LogoutView,
-    UserListView, UserInviteView, UserDetailView,
+    UserListView, UserInviteView, UserDetailView, UserSetPasswordView,
     # RequestLoginView, VerifyTokenView,  # magic-link — commented out
 )
 from league.views.schedule_generator import ScheduleGenerateView, ScheduleExportView
@@ -139,6 +140,9 @@ urlpatterns = [
     path("divisions/", DivisionListView.as_view(), name="division-list"),
 
     # Players
+    path('players/sync-report/', SyncReportViewSet.as_view({'get': 'sync_bluesombrero_report', 'post': 'sync_bluesombrero_report'}),
+        name='sync-bluesombrero-report'
+    ),
     path("players/import/", UploadPlayersView.as_view(), name="player-import"),
     path("players/resync-sports/", ResyncPlayerSportsView.as_view(), name="player-resync-sports"),
     path("players/sibling-check/", SiblingCheckView.as_view(), name="player-sibling-check"),
@@ -304,6 +308,7 @@ path("budget/lines/", BudgetLineListCreateView.as_view(), name="budget-line-list
     path("auth/users/",          UserListView.as_view(),      name="auth-user-list"),
     path("auth/users/invite/",   UserInviteView.as_view(),    name="auth-user-invite"),
     path("auth/users/<int:pk>/", UserDetailView.as_view(),    name="auth-user-detail"),
+    path("auth/users/<int:pk>/set-password/", UserSetPasswordView.as_view(), name="auth-user-set-password"),
 
     # District / Eligibility
     path("district/check/", CheckPlayersInDistrictView.as_view(), name="district-check"),

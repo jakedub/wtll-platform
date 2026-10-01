@@ -3,9 +3,9 @@ import {
   Alert,
   Box,
   Button,
+  ButtonGroup,
   Chip,
   CircularProgress,
-  Divider,
   FormControl,
   InputLabel,
   MenuItem,
@@ -23,9 +23,11 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import SyncIcon from "@mui/icons-material/Sync"
-import { importPlayerCSV } from "../api/players"
+import CloudDownloadIcon from "@mui/icons-material/CloudDownload"
+import { importPlayerCSV, syncReport } from "../api/players"
 import client from "../api/client"
 import { useAuth } from "../context/AuthContext"
+import { JsonToTableConverter } from "../components/JsonToTableConverter"
 import type { ImportResult, Player } from "../models/player"
 
 interface ProgramOption {
@@ -132,10 +134,20 @@ function FailureTable({ failures }: { failures: { row: number; error: string }[]
 export default function PlayerImportPage() {
   const { user } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Mode state: 'manual' vs 'sync'
+  const [importMode, setImportMode] = useState<"manual" | "sync">("manual")
+
+  // Manual import state
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Live Sync state
+  const [syncing, setSyncing] = useState(false)
+  const [syncedJson, setSyncedJson] = useState<any | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   // Resync sports state
   const [resyncing, setResyncing] = useState(false)
@@ -144,10 +156,10 @@ export default function PlayerImportPage() {
   // Program selector state
   const [programs, setPrograms] = useState<ProgramOption[]>([])
   const [selectedProgramId, setSelectedProgramId] = useState<number | "">("")
+  
 
   useEffect(() => {
     client.get("/program-years/").then((res) => {
-      // Response shape: [{ year: 2026, programs: [...] }, ...]
       const grouped: { year: number; programs: ProgramOption[] }[] = res.data ?? []
       const all: ProgramOption[] = grouped.flatMap((g) => g.programs ?? [])
       const active = all
@@ -185,6 +197,23 @@ export default function PlayerImportPage() {
     }
   }
 
+  const handleTriggerSync = async () => {
+    setSyncing(true)
+    setSyncError(null)
+    setSyncedJson(null)
+    try {
+      const data = await syncReport()
+      setSyncedJson(data)
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.detail ||
+        "Report synchronization failed. Please check backend logs."
+      setSyncError(msg)
+    } finally {
+      setSyncing(false)
+    }
+  }
   const handleResync = async () => {
     setResyncing(true)
     setResyncResult(null)
@@ -212,135 +241,266 @@ export default function PlayerImportPage() {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>
           <Box sx={{ width: 4, height: 28, bgcolor: "#C41230", borderRadius: 1, flexShrink: 0 }} />
           <Typography variant="h5" sx={{ fontWeight: 700, color: "#111" }}>
-            Player Import
+            Player Import & Synchronization
           </Typography>
         </Box>
         <Typography sx={{ color: "#777", fontSize: "0.875rem", ml: "20px" }}>
-          Upload a SportsConnect enrollment CSV to create or update player records.
+          Choose between uploading a manual enrollment CSV or pulling live data from Blue Sombrero.
         </Typography>
       </Box>
 
-      {/* Upload card */}
-      <Paper
-        elevation={0}
-        sx={{
-          border: "1px solid #e4e4e7",
-          borderRadius: 2,
-          p: 3,
-          mb: 3,
-          maxWidth: 600,
-        }}
-      >
-        <Typography sx={{ fontWeight: 600, mb: 2 }}>Select CSV File</Typography>
-
-        {/* Program selector */}
-        <FormControl fullWidth size="small" sx={{ mb: 2.5 }}>
-          <InputLabel id="program-select-label">Target Program</InputLabel>
-          <Select
-            labelId="program-select-label"
-            label="Target Program"
-            value={selectedProgramId}
-            onChange={(e) => setSelectedProgramId(e.target.value as number)}
-            disabled={programs.length === 0}
-          >
-            {programs.map((p) => (
-              <MenuItem key={p.id} value={p.id}>
-                {p.name}
-              </MenuItem>
-            ))}
-            {programs.length === 0 && (
-              <MenuItem value="" disabled>
-                No active programs
-              </MenuItem>
-            )}
-          </Select>
-          <Typography sx={{ fontSize: "0.72rem", color: "#888", mt: 0.5 }}>
-            Enrollment records will be created under the selected program.
-          </Typography>
-        </FormControl>
-
-        {/* Drop zone */}
-        <Box
-          onClick={() => fileInputRef.current?.click()}
-          sx={{
-            border: "2px dashed",
-            borderColor: selectedFile ? "#C41230" : "#d4d4d8",
-            borderRadius: 2,
-            p: 3,
-            textAlign: "center",
-            cursor: "pointer",
-            bgcolor: selectedFile ? "rgba(196,18,48,0.03)" : "#fafafa",
-            transition: "all 0.15s",
-            "&:hover": { borderColor: "#C41230", bgcolor: "rgba(196,18,48,0.03)" },
-            mb: 2,
-          }}
-        >
-          <UploadFileIcon sx={{ fontSize: 36, color: selectedFile ? "#C41230" : "#bbb", mb: 1 }} />
-          <Typography sx={{ fontSize: "0.875rem", color: selectedFile ? "#111" : "#888" }}>
-            {selectedFile ? selectedFile.name : "Click to select a .csv file"}
-          </Typography>
-          {selectedFile && (
-            <Typography sx={{ fontSize: "0.75rem", color: "#888", mt: 0.5 }}>
-              {(selectedFile.size / 1024).toFixed(1)} KB
-            </Typography>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleFileChange}
-            style={{ display: "none" }}
-          />
-        </Box>
-
-        <Box sx={{ display: "flex", gap: 1.5 }}>
+      {/* Mode selection buttons */}
+      <Box sx={{ mb: 3 }}>
+        <ButtonGroup disableElevation variant="outlined">
           <Button
-            variant="contained"
-            onClick={handleUpload}
-            disabled={!selectedFile || loading || selectedProgramId === ""}
-            startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <UploadFileIcon />}
-            sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } }}
+            onClick={() => setImportMode("manual")}
+            variant={importMode === "manual" ? "contained" : "outlined"}
+            sx={
+              importMode === "manual"
+                ? { bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } }
+                : { color: "#C41230", borderColor: "#C41230" }
+            }
+            startIcon={<UploadFileIcon />}
           >
-            {loading ? "Importing..." : "Import Players"}
+            Manual Import
           </Button>
-          {(selectedFile || result) && (
-            <Button variant="outlined" onClick={handleReset} startIcon={<RefreshIcon />} color="inherit">
-              Reset
-            </Button>
-          )}
-        </Box>
+          <Button
+            onClick={() => setImportMode("sync")}
+            variant={importMode === "sync" ? "contained" : "outlined"}
+            sx={
+              importMode === "sync"
+                ? { bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } }
+                : { color: "#C41230", borderColor: "#C41230" }
+            }
+            startIcon={<CloudDownloadIcon />}
+          >
+            Sync All Registration Data
+          </Button>
+        </ButtonGroup>
+      </Box>
 
-        {/* Column reference */}
-        <Box sx={{ mt: 2.5 }}>
-          <Typography sx={{ fontSize: "0.75rem", color: "#888", mb: 0.5, fontWeight: 600 }}>
-            Required columns:
-          </Typography>
-          <Typography sx={{ fontSize: "0.72rem", color: "#aaa", lineHeight: 1.8, mb: 1.5 }}>
-            Player First Name · Player Last Name · Player Birth Date
-          </Typography>
-          <Typography sx={{ fontSize: "0.75rem", color: "#888", mb: 0.5, fontWeight: 600 }}>
-            Auto-detected (if present):
-          </Typography>
-          <Typography sx={{ fontSize: "0.72rem", color: "#aaa", lineHeight: 1.8, mb: 1.5 }}>
-            Division Name · Program Name · Player Street · Player Unit · Player City · Player State ·
-            Player Postal Code · Jersey Size · User Email · Teammate Request · Coach Request ·
-            Little League School Name · Is this player's residency eligibility address… ·
-            Is the player interested in trying out for Showcase…
-          </Typography>
-          <Typography sx={{ fontSize: "0.75rem", color: "#888", mb: 0.5, fontWeight: 600 }}>
-            Division mapping (CSV → Division):
-          </Typography>
-          <Typography sx={{ fontSize: "0.72rem", color: "#aaa", lineHeight: 1.8 }}>
-            Major - Player Pitch - Major Baseball → Majors &nbsp;·&nbsp;
-            Minor - Player Pitch - AAA Baseball → AAA &nbsp;·&nbsp;
-            Minor - Coach Pitch - AA Baseball → AA &nbsp;·&nbsp;
-            Minor - Coach Pitch - Pee Wee → Pee Wee &nbsp;·&nbsp;
-            Tee Ball Clinics → Tee Ball &nbsp;·&nbsp;
-            Major - Player Pitch (Ages 11-12) → Softball Majors &nbsp;·&nbsp;
-            Minor - Player/Coach Pitch (Ages 7-10) → Softball Minors
-          </Typography>
+      {/* Mode 1: Manual CSV Import */}
+      {importMode === "manual" && (
+        <>
+          <Paper
+            elevation={0}
+            sx={{
+              border: "1px solid #e4e4e7",
+              borderRadius: 2,
+              p: 3,
+              mb: 3,
+              maxWidth: 600,
+            }}
+          >
+            <Typography sx={{ fontWeight: 600, mb: 2 }}>Select CSV File</Typography>
+
+            {/* Program selector */}
+            <FormControl fullWidth size="small" sx={{ mb: 2.5 }}>
+              <InputLabel id="program-select-label">Target Program</InputLabel>
+              <Select
+                labelId="program-select-label"
+                label="Target Program"
+                value={selectedProgramId}
+                onChange={(e) => setSelectedProgramId(e.target.value as number)}
+                disabled={programs.length === 0}
+              >
+                {programs.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    {p.name}
+                  </MenuItem>
+                ))}
+                {programs.length === 0 && (
+                  <MenuItem value="" disabled>
+                    No active programs
+                  </MenuItem>
+                )}
+              </Select>
+              <Typography sx={{ fontSize: "0.72rem", color: "#888", mt: 0.5 }}>
+                Enrollment records will be created under the selected program.
+              </Typography>
+            </FormControl>
+
+            {/* Drop zone */}
+            <Box
+              onClick={() => fileInputRef.current?.click()}
+              sx={{
+                border: "2px dashed",
+                borderColor: selectedFile ? "#C41230" : "#d4d4d8",
+                borderRadius: 2,
+                p: 3,
+                textAlign: "center",
+                cursor: "pointer",
+                bgcolor: selectedFile ? "rgba(196,18,48,0.03)" : "#fafafa",
+                transition: "all 0.15s",
+                "&:hover": { borderColor: "#C41230", bgcolor: "rgba(196,18,48,0.03)" },
+                mb: 2,
+              }}
+            >
+              <UploadFileIcon sx={{ fontSize: 36, color: selectedFile ? "#C41230" : "#bbb", mb: 1 }} />
+              <Typography sx={{ fontSize: "0.875rem", color: selectedFile ? "#111" : "#888" }}>
+                {selectedFile ? selectedFile.name : "Click to select a .csv file"}
+              </Typography>
+              {selectedFile && (
+                <Typography sx={{ fontSize: "0.75rem", color: "#888", mt: 0.5 }}>
+                  {(selectedFile.size / 1024).toFixed(1)} KB
+                </Typography>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                style={{ display: "none" }}
+              />
+            </Box>
+
+            <Box sx={{ display: "flex", gap: 1.5 }}>
+              <Button
+                variant="contained"
+                onClick={handleUpload}
+                disabled={!selectedFile || loading || selectedProgramId === ""}
+                startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <UploadFileIcon />}
+                sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } }}
+              >
+                {loading ? "Importing..." : "Import Players"}
+              </Button>
+              {(selectedFile || result) && (
+                <Button variant="outlined" onClick={handleReset} startIcon={<RefreshIcon />} color="inherit">
+                  Reset
+                </Button>
+              )}
+            </Box>
+
+            {/* Column reference */}
+            <Box sx={{ mt: 2.5 }}>
+              <Typography sx={{ fontSize: "0.75rem", color: "#888", mb: 0.5, fontWeight: 600 }}>
+                Required columns:
+              </Typography>
+              <Typography sx={{ fontSize: "0.72rem", color: "#aaa", lineHeight: 1.8, mb: 1.5 }}>
+                Player First Name · Player Last Name · Player Birth Date
+              </Typography>
+              <Typography sx={{ fontSize: "0.75rem", color: "#888", mb: 0.5, fontWeight: 600 }}>
+                Auto-detected (if present):
+              </Typography>
+              <Typography sx={{ fontSize: "0.72rem", color: "#aaa", lineHeight: 1.8, mb: 1.5 }}>
+                Division Name · Program Name · Player Street · Player Unit · Player City · Player State ·
+                Player Postal Code · Jersey Size · User Email · Teammate Request · Coach Request ·
+                Little League School Name · Is this player's residency eligibility address… ·
+                Is the player interested in trying out for Showcase…
+              </Typography>
+            </Box>
+          </Paper>
+
+          {/* Error */}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3, maxWidth: 600 }}>
+              {error}
+            </Alert>
+          )}
+
+          {/* Manual CSV Import Results */}
+          {result && (
+            <Box>
+              <Paper
+                elevation={0}
+                sx={{
+                  border: "1px solid #e4e4e7",
+                  borderRadius: 2,
+                  p: 2.5,
+                  mb: 3,
+                  display: "flex",
+                  gap: 3,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <CheckCircleOutlineIcon sx={{ color: "#2e7d32", fontSize: 20 }} />
+                  <Typography sx={{ fontWeight: 700, color: "#2e7d32" }}>
+                    {result.summary.inserted_count} inserted
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <CheckCircleOutlineIcon sx={{ color: "#1565c0", fontSize: 20 }} />
+                  <Typography sx={{ fontWeight: 700, color: "#1565c0" }}>
+                    {result.summary.updated_count} updated
+                  </Typography>
+                </Box>
+                {result.summary.failure_count > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <ErrorOutlineIcon sx={{ color: "#C41230", fontSize: 20 }} />
+                    <Typography sx={{ fontWeight: 700, color: "#C41230" }}>
+                      {result.summary.failure_count} failed
+                    </Typography>
+                  </Box>
+                )}
+              </Paper>
+
+              <Paper elevation={0} sx={{ border: "1px solid #e4e4e7", borderRadius: 2, p: 2.5, mb: 2 }}>
+                <SectionHeader title="Newly Inserted" count={result.inserted.length} color="#2e7d32" />
+                <PlayerTable players={result.inserted} emptyText="No new players were inserted." />
+              </Paper>
+
+              <Paper elevation={0} sx={{ border: "1px solid #e4e4e7", borderRadius: 2, p: 2.5, mb: 2 }}>
+                <SectionHeader title="Updated" count={result.updated.length} color="#1565c0" />
+                <PlayerTable players={result.updated} emptyText="No existing players were updated." />
+              </Paper>
+
+              {result.failures.length > 0 && (
+                <Paper
+                  elevation={0}
+                  sx={{ border: "1px solid rgba(196,18,48,0.25)", borderRadius: 2, p: 2.5 }}
+                >
+                  <SectionHeader title="Failures" count={result.failures.length} color="#C41230" />
+                  <FailureTable failures={result.failures} />
+                </Paper>
+              )}
+            </Box>
+          )}
+        </>
+      )}
+
+      {/* Mode 2: Sync All Registration Data */}
+      {importMode === "sync" && (
+        <Box sx={{ width: "90%", maxWidth: "90%" }}>
+          <Paper
+            elevation={0}
+            sx={{
+              border: "1px solid #e4e4e7",
+              borderRadius: 2,
+              p: 3,
+              mb: 3,
+            }}
+          >
+            <Typography sx={{ fontWeight: 600, mb: 1 }}>
+              Live Blue Sombrero Data Synchronization
+            </Typography>
+            <Typography sx={{ fontSize: "0.85rem", color: "#666", mb: 2.5 }}>
+              Executes a headless browser session to pull live registration data directly from the Blue Sombrero reporting platform.
+            </Typography>
+
+            <Button
+              variant="contained"
+              onClick={handleTriggerSync}
+              disabled={syncing}
+              startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : <CloudDownloadIcon />}
+              sx={{ bgcolor: "#C41230", "&:hover": { bgcolor: "#960E24" } }}
+            >
+              {syncing ? "Fetching Live Data..." : "Pull Blue Sombrero Report"}
+            </Button>
+          </Paper>
+
+          {/* Sync Error Display */}
+          {syncError && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {syncError}
+            </Alert>
+          )}
+
+          {/* Table Converter with Column Selector */}
+          {syncedJson && <JsonToTableConverter data={syncedJson} />}
         </Box>
-      </Paper>
+      )}
 
       {/* Staff-only: Resync Player Sports */}
       {user?.is_staff && (
@@ -350,7 +510,7 @@ export default function PlayerImportPage() {
             border: "1px solid #e4e4e7",
             borderRadius: 2,
             p: 2.5,
-            mb: 3,
+            mt: 4,
             maxWidth: 600,
           }}
         >
@@ -377,77 +537,6 @@ export default function PlayerImportPage() {
             )}
           </Box>
         </Paper>
-      )}
-
-      {/* Error */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3, maxWidth: 600 }}>
-          {error}
-        </Alert>
-      )}
-
-      {/* Results */}
-      {result && (
-        <Box>
-          {/* Summary banner */}
-          <Paper
-            elevation={0}
-            sx={{
-              border: "1px solid #e4e4e7",
-              borderRadius: 2,
-              p: 2.5,
-              mb: 3,
-              display: "flex",
-              gap: 3,
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <CheckCircleOutlineIcon sx={{ color: "#2e7d32", fontSize: 20 }} />
-              <Typography sx={{ fontWeight: 700, color: "#2e7d32" }}>
-                {result.summary.inserted_count} inserted
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <CheckCircleOutlineIcon sx={{ color: "#1565c0", fontSize: 20 }} />
-              <Typography sx={{ fontWeight: 700, color: "#1565c0" }}>
-                {result.summary.updated_count} updated
-              </Typography>
-            </Box>
-            {result.summary.failure_count > 0 && (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <ErrorOutlineIcon sx={{ color: "#C41230", fontSize: 20 }} />
-                <Typography sx={{ fontWeight: 700, color: "#C41230" }}>
-                  {result.summary.failure_count} failed
-                </Typography>
-              </Box>
-            )}
-          </Paper>
-
-          {/* Inserted */}
-          <Paper elevation={0} sx={{ border: "1px solid #e4e4e7", borderRadius: 2, p: 2.5, mb: 2 }}>
-            <SectionHeader title="Newly Inserted" count={result.inserted.length} color="#2e7d32" />
-            <PlayerTable players={result.inserted} emptyText="No new players were inserted." />
-          </Paper>
-
-          {/* Updated */}
-          <Paper elevation={0} sx={{ border: "1px solid #e4e4e7", borderRadius: 2, p: 2.5, mb: 2 }}>
-            <SectionHeader title="Updated" count={result.updated.length} color="#1565c0" />
-            <PlayerTable players={result.updated} emptyText="No existing players were updated." />
-          </Paper>
-
-          {/* Failures */}
-          {result.failures.length > 0 && (
-            <Paper
-              elevation={0}
-              sx={{ border: "1px solid rgba(196,18,48,0.25)", borderRadius: 2, p: 2.5 }}
-            >
-              <SectionHeader title="Failures" count={result.failures.length} color="#C41230" />
-              <FailureTable failures={result.failures} />
-            </Paper>
-          )}
-        </Box>
       )}
     </Box>
   )
